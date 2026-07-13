@@ -1,0 +1,18 @@
+{
+  "meeting_date": "2020年8月15日",
+  "registration_date": "2020年9月21日",
+  "company_name": "道通智能有限",
+  "original_capital": "84,059.1737",
+  "new_capital": "102,738.99",
+  "capital_increases": [
+    {"investor": "君度尚左", "investment_amount": "5,500", "capital_amount": "3,424.633"}
+  ],
+  "shareholders_after_increase": [],
+  "verification_report": true,
+  "verification_report_date": "2022年6月8日",
+  "verification_agency": "天健",
+  "verification_report_no": "天健验[2022]294号",
+  "capital_payment_date": "2020年9月30日",
+  "total_increase_capital": "18,679.8163",
+  "surplus_reserve": "11,320.1837"
+}

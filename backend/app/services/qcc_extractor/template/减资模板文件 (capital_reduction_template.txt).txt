@@ -1,0 +1,14 @@
+{{meeting_date}}，公司召开股东会并作出决议：同意将原注册资本{{original_capital}}万元变更为{{new_capital}}万元，并对公司章程进行相应修改。{{company_name}}本次注册资本{{original_capital}}万元变更为{{new_capital}}万元由全体股东按照同比例减资。
+
+{{announcement_date}}，公司就上述减资事宜于{{newspaper_name}}刊登了减资公告：经股东会作出决议，拟将公司注册资本由人民币{{original_capital}}万元减至人民币{{new_capital}}万元。根据《中华人民共和国公司法》等相关法律、法规的规定，公司特此通知债权人，请公司债权人自本公告见报之日起{{debt_deadline_days}}日内到本公司申报债权。本公司承诺对原注册资本内的债务承担清偿责任，股东承担连带责任。
+
+本次减资完成后，{{company_name}}的股权结构如下：
+
+| 序号 | 股东名称/姓名 | 出资额（万元） | 出资比例 |
+|:---:|:---:|:---:|:---:|
+{{#each shareholders}}
+| {{@index}} | {{name}} | {{amount}} | {{ratio}}% |
+{{/each}}
+| 合计 | - | {{new_capital}} | 100.0000% |
+
+{{registration_date}}，{{company_name}}完成了上述减资事宜的工商变更登记程序。

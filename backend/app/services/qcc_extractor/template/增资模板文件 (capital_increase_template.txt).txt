@@ -1,0 +1,18 @@
+{{meeting_date}}，公司召开股东会并作出决议：公司注册资本由人民币{{original_capital}}万元变更为人民币{{new_capital}}万元。
+{{#each capital_increases}}
+同意{{investor}}以人民币{{investment_amount}}万元认购公司新增的注册资本人民币{{capital_amount}}万元{{#unless @last}}；{{/unless}}
+{{/each}}
+
+本次增资完成后，{{company_name}}的股权结构如下：
+
+| 序号 | 股东名称/姓名 | 出资额（万元） | 出资比例 |
+|:---:|:---:|:---:|:---:|
+{{#each shareholders_after_increase}}
+| {{@index}} | {{name}} | {{amount}} | {{ratio}}% |
+{{/each}}
+| 合计 | - | {{new_capital}} | 100.0000% |
+
+{{registration_date}}，{{company_name}}完成了上述增资的工商变更登记程序。
+{{#if verification_report}}
+{{verification_report_date}}，{{verification_agency}}出具了《验资报告》（{{verification_report_no}}），截至{{capital_payment_date}}，公司已收到{{investors_list}}缴纳的新增注册资本人民币{{total_increase_capital}}万元，计入资本公积{{surplus_reserve}}万元。
+{{/if}}

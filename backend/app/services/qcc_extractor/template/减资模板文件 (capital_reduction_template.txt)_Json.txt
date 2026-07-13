@@ -1,0 +1,14 @@
+{
+  "meeting_date": "2020年11月6日",
+  "announcement_date": "2020年11月7日",
+  "registration_date": "2020年12月24日",
+  "company_name": "道通智能有限",
+  "original_capital": "102,738.99",
+  "new_capital": "12,222.2222",
+  "newspaper_name": "深圳商报",
+  "debt_deadline_days": "45",
+  "shareholders": [
+    {"name": "李红京", "amount": "4,183.5094", "ratio": "34.2287"},
+    {"name": "通元合创", "amount": "765.0276", "ratio": "6.2593"}
+  ]
+}

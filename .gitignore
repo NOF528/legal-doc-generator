@@ -1,0 +1,62 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+
+# Backend
+backend/uploads/generated/*
+backend/uploads/knowledge_base/*
+backend/uploads/templates/*
+!backend/uploads/generated/.gitkeep
+!backend/uploads/knowledge_base/.gitkeep
+!backend/uploads/templates/.gitkeep
+backend/chroma_db/
+backend/app.log
+
+# Frontend
+frontend/my-app/node_modules/
+frontend/my-app/.next/
+frontend/my-app/out/
+frontend/my-app/*.tsbuildinfo
+frontend/my-app/.env*
+frontend/my-app/next-env.d.ts
+
+# Deployment artifacts
+*.tar.gz
+*.zip
+
+# Misc
+.cursor/

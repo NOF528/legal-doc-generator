@@ -1,0 +1,12 @@
+{
+  "meeting_date": "2020年8月14日",
+  "registration_date": "2020年9月16日",
+  "company_name": "道通智能有限",
+  "transfers": [
+    {"transferor": "李红京", "transferee": "成转鹏", "ratio": "2", "capital": "1,681.1835", "price": "499.9999"}
+  ],
+  "shareholders_after_transfer": [
+    {"name": "李红京", "amount": "43,260.8221", "ratio": "51.4647"}
+  ],
+  "total_capital": "84,059.1737"
+}

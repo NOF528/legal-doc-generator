@@ -1,0 +1,103 @@
+# 法律文档生成器 - 模块化部署配置
+# 设计原则：每个服务可独立升级、扩展、替换
+
+version: '3.8'
+
+services:
+  # ==================== 前端服务 ====================
+  # 可独立升级：修改镜像标签即可更新前端
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    image: legal-doc-generator/frontend:v1.0.0
+    container_name: legal-doc-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - API_BASE_URL=/api
+    networks:
+      - legal-doc-network
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==================== 后端API服务 ====================
+  # 核心业务逻辑，可独立升级
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    image: legal-doc-generator/backend:v1.0.0
+    container_name: legal-doc-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - ENV=production
+      - DEBUG=false
+      # 简单密码保护（环境变量注入，不硬编码）
+      - ACCESS_PASSWORD=${ACCESS_PASSWORD:-}
+    volumes:
+      # 模板目录：挂载到宿主机，方便随时更新模板
+      - ../backend/templates:/app/templates
+      # 临时文件目录
+      - /tmp/legal-doc-generated:/app/generated
+    networks:
+      - legal-doc-network
+    # 资源限制（2核4G配置）
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ==================== Nginx反向代理 ====================
+  # 统一入口，处理静态资源、路由、密码保护
+  nginx:
+    image: nginx:alpine
+    container_name: legal-doc-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro
+      # SSL证书目录（后续可添加）
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - legal-doc-network
+
+  # ==================== 可选：Redis缓存 ====================
+  # 预留扩展：后续如需用户系统、限流、队列等功能
+  # 当前未启用，需要时取消注释即可
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: legal-doc-redis
+  #   restart: unless-stopped
+  #   volumes:
+  #     - redis-data:/data
+  #   networks:
+  #     - legal-doc-network
+
+# ==================== 网络配置 ====================
+networks:
+  legal-doc-network:
+    driver: bridge
+
+# ==================== 数据卷 ====================
+volumes:
+  # redis-data:
+  #   driver: local

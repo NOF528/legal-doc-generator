@@ -1,0 +1,19 @@
+{{meeting_date}}，公司召开股东会并作出决议：
+{{#each transfers}}
+同意股东{{transferor}}将其持有的公司{{ratio}}%的股权（对应注册资本人民币{{capital}}万元）以人民币{{price}}万元的对价转让给{{transferee}}；{{#unless @last}}；{{/unless}}
+{{/each}}
+
+{{#each agreement_groups}}
+{{agreement_date}}，{{transferor}}与{{transferees}}分别就上述股权转让事项签署了《股权转让协议》；
+{{/each}}
+
+本次股权转让完成后，{{company_name}}的股权结构如下：
+
+| 序号 | 股东名称/姓名 | 出资额（万元） | 出资比例 |
+|:---:|:---:|:---:|:---:|
+{{#each shareholders_after_transfer}}
+| {{@index}} | {{name}} | {{amount}} | {{ratio}}% |
+{{/each}}
+| 合计 | - | {{total_capital}} | 100.0000% |
+
+{{registration_date}}，{{company_name}}完成了上述股权转让的工商变更登记程序。
