@@ -7,7 +7,7 @@
 把下面的邮箱改成你的 GitHub 注册邮箱：
 
 ```bash
-cd /Users/yumengyang/Desktop/代码/legal-doc-generator
+cd <PROJECT_ROOT>
 git config user.name "你的GitHub用户名"
 git config user.email "你的GitHub邮箱@example.com"
 ```
@@ -23,7 +23,7 @@ git commit --amend --reset-author --no-edit
 1. 登录 https://github.com
 2. 点击右上角 `+` → `New repository`
 3. 填写：
-   - **Repository name**: `history-evolution-generator`（建议，URL 友好）
+   - **Repository name**: `legal-doc-generator`
    - **Description**: `历史沿革生成器 - 基于企查查 PDF 智能生成法律文书历史沿革`
    - **Visibility**: `Public`
 4. 不要勾选 `Initialize this repository with a README`
@@ -36,8 +36,8 @@ git commit --amend --reset-author --no-edit
 创建完成后，GitHub 会显示类似下面的命令，直接复制执行：
 
 ```bash
-cd /Users/yumengyang/Desktop/代码/legal-doc-generator
-git remote add origin https://github.com/你的GitHub用户名/history-evolution-generator.git
+cd <PROJECT_ROOT>
+git remote add origin https://github.com/你的GitHub用户名/legal-doc-generator.git
 git branch -M main
 git push -u origin main
 ```
@@ -47,7 +47,7 @@ git push -u origin main
 推送完成后，访问：
 
 ```
-https://github.com/你的GitHub用户名/history-evolution-generator
+https://github.com/你的GitHub用户名/legal-doc-generator
 ```
 
 应该能看到所有代码文件。
