@@ -4,6 +4,7 @@
 import os
 import shutil
 import tempfile
+from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
 from fastapi.responses import FileResponse
 from typing import Optional
@@ -14,21 +15,50 @@ from app.services.qcc_extractor.history_docx_generator import generate_history_w
 
 router = APIRouter()
 
+# 安全配置：最大上传文件大小 50MB
+MAX_UPLOAD_SIZE = 50 * 1024 * 1024
+
+
+def _save_upload_temp(upload_file: UploadFile, max_size: int = MAX_UPLOAD_SIZE) -> str:
+    """安全保存上传文件到临时目录，返回临时文件路径"""
+    suffix = Path(upload_file.filename).suffix if upload_file.filename else ''
+    if suffix.lower() != '.pdf':
+        raise HTTPException(status_code=400, detail="只支持 PDF 文件")
+    
+    temp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+    try:
+        shutil.copyfileobj(upload_file.file, temp)
+        temp.flush()
+        size = os.path.getsize(temp.name)
+        if size > max_size:
+            raise HTTPException(
+                status_code=413,
+                detail=f"文件超过 {max_size // 1024 // 1024}MB 限制"
+            )
+        return temp.name
+    except Exception:
+        temp.close()
+        if os.path.exists(temp.name):
+            os.unlink(temp.name)
+        raise
+    finally:
+        temp.close()
+
+
+def _cleanup_temp(path: str):
+    """安全删除临时文件"""
+    if path and os.path.exists(path):
+        os.unlink(path)
+
 
 @router.post("/extract")
 async def extract_qcc_report(file: UploadFile = File(...)):
     """
     上传企查查 PDF 报告，提取结构化数据
     """
-    # 检查文件类型
-    if not file.filename.endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="只支持 PDF 文件")
-    
-    # 保存上传的文件到临时位置
-    temp_path = f"/tmp/qcc_{file.filename}"
+    temp_path = None
     try:
-        with open(temp_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        temp_path = _save_upload_temp(file)
         
         # 提取数据
         extractor = QCCReportExtractor()
@@ -40,12 +70,12 @@ async def extract_qcc_report(file: UploadFile = File(...)):
             "filename": file.filename,
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"提取失败: {str(e)}")
     finally:
-        # 清理临时文件
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
+        _cleanup_temp(temp_path)
 
 
 @router.post("/extract-basic")
@@ -54,13 +84,9 @@ async def extract_qcc_basic(file: UploadFile = File(...)):
     提取企查查报告基础信息（精简版）
     只返回核心工商信息、股东、主要人员
     """
-    if not file.filename.endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="只支持 PDF 文件")
-    
-    temp_path = f"/tmp/qcc_{file.filename}"
+    temp_path = None
     try:
-        with open(temp_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        temp_path = _save_upload_temp(file)
         
         extractor = QCCReportExtractor()
         result = extractor.extract(temp_path)
@@ -86,11 +112,12 @@ async def extract_qcc_basic(file: UploadFile = File(...)):
             "filename": file.filename,
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"提取失败: {str(e)}")
     finally:
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
+        _cleanup_temp(temp_path)
 
 
 @router.post("/history-evolution")
@@ -103,13 +130,9 @@ async def extract_history_evolution_endpoint(file: UploadFile = File(...)):
     - 结构化的变更记录
     - 变更分类统计
     """
-    if not file.filename.endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="只支持 PDF 文件")
-    
-    temp_path = f"/tmp/qcc_{file.filename}"
+    temp_path = None
     try:
-        with open(temp_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        temp_path = _save_upload_temp(file)
         
         # 提取完整数据
         extractor = QCCReportExtractor()
@@ -132,12 +155,13 @@ async def extract_history_evolution_endpoint(file: UploadFile = File(...)):
             "filename": file.filename,
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         raise HTTPException(status_code=500, detail=f"提取失败: {str(e)}\n{traceback.format_exc()}")
     finally:
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
+        _cleanup_temp(temp_path)
 
 
 @router.post("/history-evolution/docx")
@@ -159,16 +183,12 @@ async def generate_history_word(
     返回：
     - 可直接下载的Word文档(.docx)
     """
-    if not file.filename.endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="只支持 PDF 文件")
-    
-    temp_path = f"/tmp/qcc_{file.filename}"
+    temp_path = None
     output_path = None
     
     try:
-        # 保存上传的文件
-        with open(temp_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        # 安全保存上传文件
+        temp_path = _save_upload_temp(file)
         
         # 提取完整数据
         extractor = QCCReportExtractor()
@@ -193,8 +213,10 @@ async def generate_history_word(
             from app.services.qcc_extractor.history_docx_generator import get_template_path
             template_path = get_template_path()
         
-        # 生成Word文档
-        output_path = tempfile.mktemp(suffix='.docx')
+        # 安全生成输出临时文件
+        output_fd, output_path = tempfile.mkstemp(suffix='.docx')
+        os.close(output_fd)
+        
         generate_history_word_document(
             company_name=company_name,
             history_result=history,
@@ -210,15 +232,15 @@ async def generate_history_word(
             filename=f"{company_name}_历史沿革.docx"
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
-        # 清理临时文件
-        if output_path and os.path.exists(output_path):
-            os.remove(output_path)
         raise HTTPException(status_code=500, detail=f"生成失败: {str(e)}\n{traceback.format_exc()}")
     finally:
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
+        _cleanup_temp(temp_path)
+        # 注意：output_path 在 FileResponse 后由 FastAPI 负责清理，
+        # 此处不删除，避免返回前文件被删除
 
 
 @router.get("/history-evolution/templates")
