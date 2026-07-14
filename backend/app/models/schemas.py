@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
@@ -12,11 +12,46 @@ class DocumentType(str, Enum):
     CUSTOM = "custom"                # 自定义
 
 
+# ================================================================
+# 流水线相关 Schema（供 API 层使用）
+# 完整领域模型见 app.models.pipeline
+# ================================================================
+
+class HistoryEvolutionResponse(BaseModel):
+    """历史沿革 API 响应"""
+    success: bool
+    company_name: str
+    status: str
+    history_evolution: Dict[str, Any]
+    changes: List[Dict[str, Any]]
+    review_issues: List[Dict[str, Any]]
+    review_passed: bool
+    filename: str
+
+
+class ExtractBasicResponse(BaseModel):
+    """基础信息提取 API 响应"""
+    success: bool
+    data: Dict[str, Any]
+    filename: str
+
+
+class ExtractFullResponse(BaseModel):
+    """完整提取 API 响应"""
+    success: bool
+    data: Dict[str, Any]  # Report 模型的 dict 形式
+    filename: str
+
+
+# ================================================================
+# 模板/文档相关 Schema
+# ================================================================
+
 class TemplateBase(BaseModel):
     name: str
     description: Optional[str] = None
     document_type: DocumentType
-    
+
 
 class TemplateCreate(TemplateBase):
     pass
@@ -27,7 +62,7 @@ class TemplateResponse(TemplateBase):
     file_path: str
     created_at: datetime
     updated_at: Optional[datetime] = None
-    
+
     class Config:
         from_attributes = True
 
@@ -58,7 +93,7 @@ class KnowledgeItemCreate(KnowledgeItemBase):
 class KnowledgeItemResponse(KnowledgeItemBase):
     id: str
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -77,6 +112,6 @@ class SOPCreate(SOPBase):
 class SOPResponse(SOPBase):
     id: str
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
