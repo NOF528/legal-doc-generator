@@ -43,8 +43,10 @@ class TableRowBuffer:
         line = re.sub(r"企查查科技股份有限公司\s+\d+", "", line)
         line = re.sub(r"企业信用报告专业版", "", line)
         line = re.sub(r"---PAGE_\d+---", "", line)
-        line = re.sub(r"深圳华云信息系统科技股份有限公司", "", line)  # 动态企业名
+        # 注意：不再硬编码清洗特定企业名。页眉中的企业名应由 PageHeaderCleaner
+        # 根据传入的 company_name 统一处理，避免误删正文中的同名企业。
         return line.strip()
+      
     
     def _is_new_row_start(self, line: str) -> bool:
         """
