@@ -1,28 +1,39 @@
 @import "tailwindcss";
 
 /* ============================================================
-   一只鱼律 · 历史沿革生成器 — Kimi 官网同款极简风
-   全站黑白灰，无彩色、无渐变、无深色模式、无毛玻璃
+   一只鱼律 · 历史沿革生成器 — 暖纸质感版
+   暖灰米白底 + 纯白卡片，克制暖棕强调色
    ============================================================ */
 
 :root {
-  /* 颜色：整个页面只允许这几个色 */
-  --bg: #ffffff;
-  --text-primary: #1a1a1a;
-  --text-secondary: #6b7280;
-  --text-tertiary: #9ca3af;
-  --surface: #f7f7f8;
-  --border: #ebebEd;
-  --border-strong: #d1d1d6;
-  --accent: #1a1a1a;
+  /* 背景：暖米白，带一点纸张的温度 */
+  --bg: #f7f6f3;
+  --bg-glow: radial-gradient(ellipse 90% 55% at 50% -10%, rgba(217, 197, 160, 0.18), transparent);
+
+  /* 卡片与次级底 */
+  --surface: #ffffff;
+  --surface-subtle: #fbfaf8;
+
+  /* 文字：暖调黑灰 */
+  --text-primary: #1c1b1a;
+  --text-secondary: #6e6a63;
+  --text-tertiary: #a8a29a;
+
+  /* 描边 */
+  --border: #ece9e3;
+  --border-hover: #d8d3c9;
+
+  /* 强调色：唯一彩色，暖棕 */
+  --accent: #b45309;
+  --accent-soft: rgba(180, 83, 9, 0.08);
 
   /* 圆角 */
   --radius-card: 24px;
   --radius-inner: 16px;
   --radius-pill: 999px;
 
-  /* 阴影：极淡，只给主卡片 */
-  --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.03);
+  /* 阴影：暖调、柔和、向下 */
+  --shadow-card: 0 1px 2px rgba(28, 27, 26, 0.04), 0 8px 24px rgba(28, 27, 26, 0.06);
 
   /* 字体 */
   --font: -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
@@ -43,8 +54,17 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: var(--bg-glow);
+  pointer-events: none;
+  z-index: -1;
+}
+
 ::selection {
-  background: #e5e5ea;
+  background: #e8e2d8;
 }
 
 /* ---------- 通用 ---------- */
@@ -62,7 +82,6 @@ body {
   padding: 0 24px;
 }
 
-/* 元素入场：极轻 fade-up，每个元素最多一次 */
 @keyframes kw-fade-up {
   from {
     opacity: 0;
@@ -82,36 +101,21 @@ body {
 
 .kw-brand {
   text-align: center;
-  padding-top: clamp(80px, 16vh, 160px);
-}
-
-.kw-brand-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 20px;
-  color: var(--text-primary);
+  padding-top: clamp(72px, 14vh, 140px);
 }
 
 .kw-brand-title {
   margin: 0;
-  font-size: 64px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  line-height: 1.4;
+  font-size: clamp(52px, 7.5vw, 80px);
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  line-height: 1.1;
   color: var(--text-primary);
 }
 
-.kw-brand-subtitle {
-  margin: 12px 0 0;
-  font-size: 16px;
-  color: var(--text-secondary);
-  letter-spacing: 0.08em;
-}
-
 .kw-brand-contact {
-  margin: 8px 0 0;
-  font-size: 13px;
+  margin: 12px 0 0;
+  font-size: 14px;
   color: var(--text-tertiary);
   letter-spacing: 0.02em;
 }
@@ -124,7 +128,7 @@ body {
   gap: 10px;
   margin: 48px auto 0;
   padding: 12px 16px;
-  background: var(--surface);
+  background: var(--surface-subtle);
   border-radius: var(--radius-inner);
   font-size: 14px;
   color: var(--text-secondary);
@@ -155,7 +159,7 @@ body {
 
 .kw-card {
   margin: 20px auto 0;
-  background: var(--bg);
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
@@ -164,8 +168,8 @@ body {
 
 .kw-card:focus-within,
 .kw-card.kw-dragover {
-  border-color: var(--border-strong);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
+  border-color: var(--border-hover);
+  box-shadow: 0 2px 4px rgba(28, 27, 26, 0.05), 0 12px 32px rgba(28, 27, 26, 0.08);
 }
 
 .kw-card-body {
@@ -187,7 +191,7 @@ body {
   gap: 10px;
   max-width: 100%;
   padding: 10px 14px;
-  background: var(--surface);
+  background: var(--surface-subtle);
   border-radius: var(--radius-inner);
   font-size: 14px;
   color: var(--text-primary);
@@ -240,7 +244,7 @@ body {
 }
 
 .kw-icon-btn:hover {
-  background: var(--surface);
+  background: var(--surface-subtle);
   color: var(--text-primary);
 }
 
@@ -253,25 +257,34 @@ body {
   height: 40px;
   border: none;
   border-radius: 50%;
-  background: var(--surface);
-  color: #ffffff;
+  background: #efedea;
+  color: var(--text-tertiary);
   cursor: not-allowed;
-  transition: background 180ms ease;
+  transition: background 180ms ease, color 180ms ease;
 }
 
 .kw-send-btn.kw-active {
   background: var(--accent);
+  color: #ffffff;
   cursor: pointer;
 }
 
-/* ---------- 药丸 ---------- */
+/* ---------- 药丸：两行，第二行交错 ---------- */
 
-.kw-pills {
+.kw-pills-row,
+.kw-pills-contact-row {
   display: flex;
-  flex-wrap: wrap;
   justify-content: center;
-  gap: 10px;
+  gap: 24px;
+}
+
+.kw-pills-row {
   margin: 24px auto 0;
+}
+
+.kw-pills-contact-row {
+  margin: 16px auto 0;
+  transform: translateX(-40px);
 }
 
 .kw-pill {
@@ -281,10 +294,9 @@ body {
   padding: 8px 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
-  background: var(--bg);
+  background: var(--surface);
   font-size: 14px;
   color: var(--text-secondary);
-  cursor: default;
   transition: background 180ms ease, border-color 180ms ease;
 }
 
@@ -296,25 +308,47 @@ button.kw-pill {
   cursor: pointer;
 }
 
-button.kw-pill:hover {
-  background: var(--surface);
-  border-color: var(--border-strong);
+button.kw-pill:hover,
+.kw-pill:hover {
+  background: var(--surface-subtle);
+  border-color: var(--border-hover);
 }
 
-/* 联系药丸：视觉更弱一档 */
+/* 联系药丸：透明底，更弱 */
 .kw-pill.kw-pill-contact {
+  background: transparent;
   font-size: 13px;
   color: var(--text-tertiary);
 }
 
 .kw-pill.kw-pill-contact:hover {
   color: var(--text-secondary);
+  background: transparent;
+  border-color: var(--border-hover);
+}
+
+/* ---------- 错误提示 ---------- */
+
+.kw-error {
+  margin-top: 24px;
+  padding: 14px 18px;
+  background: var(--surface-subtle);
+  border-radius: var(--radius-inner);
+  font-size: 14px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 /* ---------- 结果区（时间轴） ---------- */
 
 .kw-result {
   margin-top: 96px;
+  padding: 32px;
+  background: var(--surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
 }
 
 .kw-result-title {
@@ -360,14 +394,15 @@ button.kw-pill:hover {
   top: 10px;
   width: 13px;
   height: 13px;
-  border: 1.5px solid var(--text-primary);
+  border: 1.5px solid var(--accent);
   border-radius: 50%;
-  background: var(--bg);
-  transition: transform 180ms ease;
+  background: var(--surface);
+  transition: transform 180ms ease, background 180ms ease;
 }
 
 .kw-event:hover .kw-event-node {
   transform: scale(1.1);
+  background: var(--accent-soft);
 }
 
 .kw-event-year {
@@ -387,7 +422,7 @@ button.kw-pill:hover {
 
 .kw-event-body {
   font-size: 15px;
-  color: var(--text-primary);
+  color: var(--text-secondary);
   line-height: 1.8;
 }
 
@@ -395,10 +430,9 @@ button.kw-pill:hover {
   margin: 0 0 12px;
 }
 
-/* 【**】占位高亮：灰底，不用彩色 */
 .kw-event-body mark {
-  background: var(--surface);
-  color: var(--text-secondary);
+  background: var(--accent-soft);
+  color: var(--text-primary);
   padding: 1px 4px;
   border-radius: 6px;
 }
@@ -429,7 +463,7 @@ button.kw-pill:hover {
 .kw-missing {
   margin-top: 64px;
   padding: 24px;
-  background: var(--surface);
+  background: var(--surface-subtle);
   border-radius: var(--radius-inner);
 }
 
@@ -472,7 +506,7 @@ button.kw-pill:hover {
   padding: 12px 28px;
   border: none;
   border-radius: var(--radius-pill);
-  background: var(--accent);
+  background: var(--text-primary);
   color: #ffffff;
   font-size: 15px;
   cursor: pointer;
@@ -503,23 +537,9 @@ button.kw-pill:hover {
 }
 
 .kw-skeleton {
-  background: var(--surface);
+  background: #efedea;
   border-radius: var(--radius-inner);
   animation: kw-breathe 1.6s ease-in-out infinite;
-}
-
-/* ---------- 错误提示 ---------- */
-
-.kw-error {
-  margin-top: 24px;
-  padding: 14px 18px;
-  background: var(--surface);
-  border-radius: var(--radius-inner);
-  font-size: 14px;
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  gap: 10px;
 }
 
 /* ---------- 底部探索条 / 页脚 ---------- */
@@ -535,7 +555,7 @@ button.kw-pill:hover {
   justify-content: space-between;
   height: 64px;
   padding: 0 24px;
-  background: var(--surface);
+  background: var(--surface-subtle);
   border-radius: var(--radius-inner) var(--radius-inner) 0 0;
   font-size: 14px;
   color: var(--text-secondary);
@@ -546,7 +566,7 @@ button.kw-pill:hover {
 }
 
 .kw-explore:hover {
-  background: #f0f0f2;
+  background: #f1efec;
 }
 
 .kw-explore span {
@@ -560,7 +580,7 @@ button.kw-pill:hover {
   text-align: center;
   font-size: 12px;
   color: var(--text-tertiary);
-  background: var(--surface);
+  background: transparent;
 }
 
 .kw-footer a,
@@ -581,12 +601,12 @@ button.kw-pill:hover {
   color: var(--text-secondary);
 }
 
-/* ---------- 弹层（二维码 / 使用说明） ---------- */
+/* ---------- 弹层 ---------- */
 
 .kw-modal-mask {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(28, 27, 26, 0.25);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -595,7 +615,7 @@ button.kw-pill:hover {
 }
 
 .kw-modal {
-  background: var(--bg);
+  background: var(--surface);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
   padding: 32px;
@@ -649,7 +669,7 @@ button.kw-pill:hover {
   left: 50%;
   transform: translateX(-50%);
   padding: 10px 20px;
-  background: var(--surface);
+  background: var(--surface-subtle);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
   font-size: 13px;

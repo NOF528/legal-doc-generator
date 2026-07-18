@@ -13,7 +13,6 @@ import {
   MessageCircle,
   List,
   Download,
-  Filter,
   ClipboardList,
 } from "lucide-react";
 
@@ -333,24 +332,20 @@ export default function HistoryWorkspace() {
           </div>
         )}
 
-        {/* 药丸 */}
-        <div className="kw-pills kw-fade-up">
-          <span className="kw-pill">
-            <Filter size={14} strokeWidth={1.5} />
-            仅三类变更
-          </span>
+        {/* 功能药丸：只保留两个，单独一行 */}
+        <div className="kw-pills-row kw-fade-up">
           <span className="kw-pill">
             <Download size={14} strokeWidth={1.5} />
             导出 Word
           </span>
           <span className="kw-pill">
-            <ClipboardList size={14} strokeWidth={1.5} />
-            待补充清单
-          </span>
-          <span className="kw-pill">
             <List size={14} strokeWidth={1.5} />
             时间轴视图
           </span>
+        </div>
+
+        {/* 联系药丸：另起一行，交错排列 */}
+        <div className="kw-pills-contact-row kw-fade-up">
           <button className="kw-pill kw-pill-contact" onClick={() => setShowQR(true)}>
             <MessageCircle size={14} strokeWidth={1.5} />
             公众号：{WECHAT}
