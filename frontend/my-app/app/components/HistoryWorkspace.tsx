@@ -114,25 +114,16 @@ function DraftBody({ text }: { text: string }) {
   return <div className="kw-event-body">{blocks}</div>;
 }
 
-/** 二维码占位图（后续替换为真实公众号二维码图片） */
-function QRPlaceholder() {
-  const size = 21;
-  const cells: React.ReactNode[] = [];
-  // 固定伪随机图案（占位用）
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const v = (x * 31 + y * 17 + ((x * y) % 7)) % 3 === 0;
-      if (v) {
-        cells.push(
-          <rect key={`${x}-${y}`} x={x * 6} y={y * 6} width={6} height={6} fill="#1a1a1a" />
-        );
-      }
-    }
-  }
+/** 二维码图片（真实公众号二维码） */
+function QRImage() {
   return (
-    <svg width="126" height="126" viewBox={`0 0 ${size * 6} ${size * 6}`} style={{ margin: "0 auto" }}>
-      {cells}
-    </svg>
+    <img
+      src="/wechat-qr.jpg"
+      alt="公众号二维码"
+      width={200}
+      height={200}
+      style={{ display: "block", margin: "0 auto", borderRadius: "12px" }}
+    />
   );
 }
 
@@ -445,8 +436,8 @@ export default function HistoryWorkspace() {
         <div className="kw-modal-mask" onClick={() => setShowQR(false)}>
           <div className="kw-modal" onClick={(e) => e.stopPropagation()}>
             <p className="kw-modal-title">微信公众号：{WECHAT}</p>
-            <QRPlaceholder />
-            <p className="kw-modal-text">扫码关注，获取工具更新与法律实务分享</p>
+            <QRImage />
+            <p className="kw-modal-text">欢迎大佬关注，共同进步</p>
           </div>
         </div>
       )}
