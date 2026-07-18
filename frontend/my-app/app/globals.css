@@ -1,87 +1,659 @@
 @import "tailwindcss";
 
+/* ============================================================
+   一只鱼律 · 历史沿革生成器 — Kimi 官网同款极简风
+   全站黑白灰，无彩色、无渐变、无深色模式、无毛玻璃
+   ============================================================ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-  --primary: #3b82f6;
-  --primary-hover: #2563eb;
-  --border: #e5e7eb;
-  --muted: #f3f4f6;
+  /* 颜色：整个页面只允许这几个色 */
+  --bg: #ffffff;
+  --text-primary: #1a1a1a;
+  --text-secondary: #6b7280;
+  --text-tertiary: #9ca3af;
+  --surface: #f7f7f8;
+  --border: #ebebEd;
+  --border-strong: #d1d1d6;
+  --accent: #1a1a1a;
+
+  /* 圆角 */
+  --radius-card: 24px;
+  --radius-inner: 16px;
+  --radius-pill: 999px;
+
+  /* 阴影：极淡，只给主卡片 */
+  --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.03);
+
+  /* 字体 */
+  --font: -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-primary: var(--primary);
-  --color-border: var(--border);
-  --color-muted: var(--muted);
+* {
+  box-sizing: border-box;
 }
 
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* 自定义滚动条 */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+::selection {
+  background: #e5e5ea;
 }
 
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
+/* ---------- 通用 ---------- */
+
+.kw-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
-::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 4px;
+.kw-container {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 24px;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #a1a1a1;
+/* 元素入场：极轻 fade-up，每个元素最多一次 */
+@keyframes kw-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-/* 按钮基础样式 */
-.btn {
-  @apply px-4 py-2 rounded-lg font-medium transition-colors;
+.kw-fade-up {
+  animation: kw-fade-up 300ms ease both;
 }
 
-.btn-primary {
-  @apply bg-blue-600 text-white hover:bg-blue-700;
+/* ---------- 品牌区 ---------- */
+
+.kw-brand {
+  text-align: center;
+  padding-top: clamp(80px, 16vh, 160px);
 }
 
-.btn-secondary {
-  @apply bg-gray-100 text-gray-700 hover:bg-gray-200;
+.kw-brand-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+  color: var(--text-primary);
 }
 
-.btn-danger {
-  @apply bg-red-600 text-white hover:bg-red-700;
+.kw-brand-title {
+  margin: 0;
+  font-size: 64px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  line-height: 1.4;
+  color: var(--text-primary);
 }
 
-/* 输入框样式 */
-.input {
-  @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent;
+.kw-brand-subtitle {
+  margin: 12px 0 0;
+  font-size: 16px;
+  color: var(--text-secondary);
+  letter-spacing: 0.08em;
 }
 
-/* 卡片样式 */
-.card {
-  @apply bg-white rounded-xl shadow-sm border border-gray-200 p-6;
+.kw-brand-contact {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--text-tertiary);
+  letter-spacing: 0.02em;
 }
 
-/* 标签样式 */
-.badge {
-  @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+/* ---------- 提示条 ---------- */
+
+.kw-infobar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 48px auto 0;
+  padding: 12px 16px;
+  background: var(--surface);
+  border-radius: var(--radius-inner);
+  font-size: 14px;
+  color: var(--text-secondary);
 }
 
-.badge-blue {
-  @apply bg-blue-100 text-blue-800;
+.kw-infobar svg {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
 }
 
-.badge-green {
-  @apply bg-green-100 text-green-800;
+.kw-infobar-close {
+  margin-left: auto;
+  display: inline-flex;
+  padding: 2px;
+  border: none;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: color 180ms ease;
 }
 
-.badge-gray {
-  @apply bg-gray-100 text-gray-800;
+.kw-infobar-close:hover {
+  color: var(--text-secondary);
+}
+
+/* ---------- 主输入卡片 ---------- */
+
+.kw-card {
+  margin: 20px auto 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.kw-card:focus-within,
+.kw-card.kw-dragover {
+  border-color: var(--border-strong);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.kw-card-body {
+  padding: 24px 24px 12px;
+  min-height: 120px;
+  cursor: text;
+}
+
+.kw-card-placeholder {
+  color: var(--text-tertiary);
+  font-size: 16px;
+  line-height: 1.8;
+  user-select: none;
+}
+
+.kw-file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  padding: 10px 14px;
+  background: var(--surface);
+  border-radius: var(--radius-inner);
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.kw-file-chip svg {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.kw-file-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kw-file-chip-remove {
+  display: inline-flex;
+  padding: 2px;
+  border: none;
+  background: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: color 180ms ease;
+}
+
+.kw-file-chip-remove:hover {
+  color: var(--text-secondary);
+}
+
+.kw-card-toolbar {
+  display: flex;
+  align-items: center;
+  padding: 0 16px 16px;
+}
+
+.kw-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 180ms ease, color 180ms ease;
+}
+
+.kw-icon-btn:hover {
+  background: var(--surface);
+  color: var(--text-primary);
+}
+
+.kw-send-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface);
+  color: #ffffff;
+  cursor: not-allowed;
+  transition: background 180ms ease;
+}
+
+.kw-send-btn.kw-active {
+  background: var(--accent);
+  cursor: pointer;
+}
+
+/* ---------- 药丸 ---------- */
+
+.kw-pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin: 24px auto 0;
+}
+
+.kw-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg);
+  font-size: 14px;
+  color: var(--text-secondary);
+  cursor: default;
+  transition: background 180ms ease, border-color 180ms ease;
+}
+
+.kw-pill svg {
+  color: var(--text-tertiary);
+}
+
+button.kw-pill {
+  cursor: pointer;
+}
+
+button.kw-pill:hover {
+  background: var(--surface);
+  border-color: var(--border-strong);
+}
+
+/* 联系药丸：视觉更弱一档 */
+.kw-pill.kw-pill-contact {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.kw-pill.kw-pill-contact:hover {
+  color: var(--text-secondary);
+}
+
+/* ---------- 结果区（时间轴） ---------- */
+
+.kw-result {
+  margin-top: 96px;
+}
+
+.kw-result-title {
+  margin: 0 0 8px;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.kw-result-meta {
+  margin: 0 0 64px;
+  font-size: 14px;
+  color: var(--text-tertiary);
+}
+
+.kw-timeline {
+  position: relative;
+  padding-left: 28px;
+}
+
+.kw-timeline::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 8px;
+  bottom: 8px;
+  width: 1px;
+  background: var(--border);
+}
+
+.kw-event {
+  position: relative;
+  padding-bottom: 64px;
+}
+
+.kw-event:last-child {
+  padding-bottom: 0;
+}
+
+.kw-event-node {
+  position: absolute;
+  left: -28px;
+  top: 10px;
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid var(--text-primary);
+  border-radius: 50%;
+  background: var(--bg);
+  transition: transform 180ms ease;
+}
+
+.kw-event:hover .kw-event-node {
+  transform: scale(1.1);
+}
+
+.kw-event-year {
+  display: block;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.kw-event-title {
+  margin: 4px 0 16px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.kw-event-body {
+  font-size: 15px;
+  color: var(--text-primary);
+  line-height: 1.8;
+}
+
+.kw-event-body p {
+  margin: 0 0 12px;
+}
+
+/* 【**】占位高亮：灰底，不用彩色 */
+.kw-event-body mark {
+  background: var(--surface);
+  color: var(--text-secondary);
+  padding: 1px 4px;
+  border-radius: 6px;
+}
+
+.kw-event-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0 16px;
+  font-size: 14px;
+}
+
+.kw-event-table th,
+.kw-event-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  color: var(--text-primary);
+}
+
+.kw-event-table th {
+  color: var(--text-tertiary);
+  font-weight: 500;
+  font-size: 13px;
+}
+
+/* ---------- 待补充清单 ---------- */
+
+.kw-missing {
+  margin-top: 64px;
+  padding: 24px;
+  background: var(--surface);
+  border-radius: var(--radius-inner);
+}
+
+.kw-missing-title {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kw-missing-title svg {
+  color: var(--text-secondary);
+}
+
+.kw-missing-list {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.kw-missing-list li {
+  margin-bottom: 4px;
+}
+
+/* ---------- 下载按钮 / 水印 ---------- */
+
+.kw-actions {
+  margin-top: 48px;
+  display: flex;
+  justify-content: center;
+}
+
+.kw-download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 28px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 15px;
+  cursor: pointer;
+  transition: opacity 180ms ease;
+}
+
+.kw-download-btn:hover {
+  opacity: 0.85;
+}
+
+.kw-watermark {
+  margin-top: 64px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* ---------- 骨架屏 ---------- */
+
+@keyframes kw-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.kw-skeleton {
+  background: var(--surface);
+  border-radius: var(--radius-inner);
+  animation: kw-breathe 1.6s ease-in-out infinite;
+}
+
+/* ---------- 错误提示 ---------- */
+
+.kw-error {
+  margin-top: 24px;
+  padding: 14px 18px;
+  background: var(--surface);
+  border-radius: var(--radius-inner);
+  font-size: 14px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ---------- 底部探索条 / 页脚 ---------- */
+
+.kw-explore-wrap {
+  margin-top: auto;
+  padding-top: 120px;
+}
+
+.kw-explore {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+  padding: 0 24px;
+  background: var(--surface);
+  border-radius: var(--radius-inner) var(--radius-inner) 0 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border: none;
+  width: 100%;
+  transition: background 180ms ease;
+}
+
+.kw-explore:hover {
+  background: #f0f0f2;
+}
+
+.kw-explore span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kw-footer {
+  padding: 24px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  background: var(--surface);
+}
+
+.kw-footer a,
+.kw-footer button {
+  color: var(--text-tertiary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  background: none;
+  border: none;
+  font-size: inherit;
+  cursor: pointer;
+  padding: 0;
+  transition: color 180ms ease;
+}
+
+.kw-footer a:hover,
+.kw-footer button:hover {
+  color: var(--text-secondary);
+}
+
+/* ---------- 弹层（二维码 / 使用说明） ---------- */
+
+.kw-modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  animation: kw-modal-in 200ms ease both;
+}
+
+.kw-modal {
+  background: var(--bg);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 32px;
+  max-width: 360px;
+  width: calc(100vw - 48px);
+  text-align: center;
+  animation: kw-modal-in 200ms ease both;
+}
+
+@keyframes kw-modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.kw-modal-title {
+  margin: 0 0 16px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.kw-modal-text {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.kw-modal ol {
+  text-align: left;
+  font-size: 14px;
+  color: var(--text-secondary);
+  padding-left: 20px;
+  margin: 16px 0 0;
+}
+
+.kw-modal ol li {
+  margin-bottom: 10px;
+  line-height: 1.7;
+}
+
+/* ---------- Toast ---------- */
+
+.kw-toast {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: 13px;
+  color: var(--text-secondary);
+  z-index: 60;
+  animation: kw-fade-up 200ms ease both;
 }

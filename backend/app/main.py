@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 
 from app.core.config import settings
+from app.core.errors import register_error_handlers
 from app.api.v1 import api_router
 
 app = FastAPI(
@@ -11,6 +12,9 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     redirect_slashes=False
 )
+
+# 统一错误处理
+register_error_handlers(app)
 
 # CORS
 app.add_middleware(

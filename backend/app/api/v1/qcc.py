@@ -5,51 +5,23 @@
 """
 
 import os
-import shutil
 import tempfile
-from pathlib import Path
-from fastapi import APIRouter, UploadFile, File, HTTPException, Form
+from fastapi import APIRouter, UploadFile, File, HTTPException, Form, Request
 from fastapi.responses import FileResponse
 from typing import Optional
 
+from app.core.upload_guard import save_upload_temp, cleanup_temp
 from app.services.qcc_pipeline import QCCProcessingService
 
 router = APIRouter()
 
-# 安全配置：最大上传文件大小 50MB
-MAX_UPLOAD_SIZE = 50 * 1024 * 1024
 
-
-def _save_upload_temp(upload_file: UploadFile, max_size: int = MAX_UPLOAD_SIZE) -> str:
-    """安全保存上传文件到临时目录，返回临时文件路径"""
-    suffix = Path(upload_file.filename).suffix if upload_file.filename else ''
-    if suffix.lower() != '.pdf':
-        raise HTTPException(status_code=400, detail="只支持 PDF 文件")
-
-    temp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
-    try:
-        shutil.copyfileobj(upload_file.file, temp)
-        temp.flush()
-        size = os.path.getsize(temp.name)
-        if size > max_size:
-            raise HTTPException(
-                status_code=413,
-                detail=f"文件超过 {max_size // 1024 // 1024}MB 限制"
-            )
-        return temp.name
-    except Exception:
-        temp.close()
-        if os.path.exists(temp.name):
-            os.unlink(temp.name)
-        raise
-    finally:
-        temp.close()
-
-
-def _cleanup_temp(path: str):
-    """安全删除临时文件"""
-    if path and os.path.exists(path):
-        os.unlink(path)
+def _client_host(request: Request) -> str | None:
+    """获取客户端 IP（考虑反向代理）"""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else None
 
 
 def _build_compatible_response(report):
@@ -91,12 +63,20 @@ def _build_compatible_response(report):
         "category_stats": category_stats,
     }
 
+    # 汇总所有草稿的待补充字段（去重，保持顺序）
+    all_missing = []
+    for d in report.history_drafts:
+        for m in d.missing_fields:
+            if m not in all_missing:
+                all_missing.append(m)
+
     return {
         "success": True,
         "company_name": report.company_name,
         "status": report.status.value,
         "history_evolution": history_evolution_compat,
         "changes": compatible_changes,
+        "missing_fields": all_missing,
         "review_issues": [i.model_dump() for i in report.review_issues],
         "review_passed": report.review_passed,
         "filename": report.filename,
@@ -115,7 +95,7 @@ def _build_compatible_response(report):
 # 提取完整结构化数据（含流水线中间态）
 # ================================================================
 @router.post("/extract")
-async def extract_qcc_report(file: UploadFile = File(...)):
+async def extract_qcc_report(request: Request, file: UploadFile = File(...)):
     """
     上传企查查 PDF 报告，跑完整流水线（extract -> normalize -> classify -> draft -> review）
 
@@ -123,7 +103,7 @@ async def extract_qcc_report(file: UploadFile = File(...)):
     """
     temp_path = None
     try:
-        temp_path = _save_upload_temp(file)
+        temp_path, file_hash = await save_upload_temp(file, _client_host(request))
 
         service = QCCProcessingService()
         report = service.process_full(temp_path, file.filename)
@@ -132,6 +112,7 @@ async def extract_qcc_report(file: UploadFile = File(...)):
             "success": True,
             "data": report.model_dump(),
             "filename": file.filename,
+            "file_hash": file_hash,
         }
 
     except HTTPException:
@@ -140,21 +121,21 @@ async def extract_qcc_report(file: UploadFile = File(...)):
         import traceback
         raise HTTPException(status_code=500, detail=f"提取失败: {str(e)}\n{traceback.format_exc()}")
     finally:
-        _cleanup_temp(temp_path)
+        cleanup_temp(temp_path)
 
 
 # ================================================================
 # 提取基础信息（精简版）
 # ================================================================
 @router.post("/extract-basic")
-async def extract_qcc_basic(file: UploadFile = File(...)):
+async def extract_qcc_basic(request: Request, file: UploadFile = File(...)):
     """
     提取企查查报告基础信息（精简版）
     只返回核心工商信息、股东、主要人员
     """
     temp_path = None
     try:
-        temp_path = _save_upload_temp(file)
+        temp_path, _ = await save_upload_temp(file, _client_host(request))
 
         service = QCCProcessingService()
         report = service.upload(temp_path, file.filename)
@@ -186,14 +167,14 @@ async def extract_qcc_basic(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"提取失败: {str(e)}")
     finally:
-        _cleanup_temp(temp_path)
+        cleanup_temp(temp_path)
 
 
 # ================================================================
 # 生成历史沿革（完整流水线）
 # ================================================================
 @router.post("/history-evolution")
-async def extract_history_evolution_endpoint(file: UploadFile = File(...)):
+async def extract_history_evolution_endpoint(request: Request, file: UploadFile = File(...)):
     """
     提取企查查报告并生成历史沿革
 
@@ -204,12 +185,14 @@ async def extract_history_evolution_endpoint(file: UploadFile = File(...)):
     """
     temp_path = None
     try:
-        temp_path = _save_upload_temp(file)
+        temp_path, file_hash = await save_upload_temp(file, _client_host(request))
 
         service = QCCProcessingService()
         report = service.process_full(temp_path, file.filename)
 
-        return _build_compatible_response(report)
+        response = _build_compatible_response(report)
+        response["file_hash"] = file_hash
+        return response
 
     except HTTPException:
         raise
@@ -217,7 +200,7 @@ async def extract_history_evolution_endpoint(file: UploadFile = File(...)):
         import traceback
         raise HTTPException(status_code=500, detail=f"提取失败: {str(e)}\n{traceback.format_exc()}")
     finally:
-        _cleanup_temp(temp_path)
+        cleanup_temp(temp_path)
 
 
 # ================================================================
@@ -225,6 +208,7 @@ async def extract_history_evolution_endpoint(file: UploadFile = File(...)):
 # ================================================================
 @router.post("/history-evolution/docx")
 async def generate_history_word(
+    request: Request,
     file: UploadFile = File(...),
     law_firm_name: str = Form(""),
     lawyer_name: str = Form(""),
@@ -246,7 +230,7 @@ async def generate_history_word(
     output_path = None
 
     try:
-        temp_path = _save_upload_temp(file)
+        temp_path, _ = await save_upload_temp(file, _client_host(request))
 
         service = QCCProcessingService()
         report = service.process_full(temp_path, file.filename)
@@ -289,7 +273,7 @@ async def generate_history_word(
             os.unlink(output_path)
         raise HTTPException(status_code=500, detail=f"生成失败: {str(e)}\n{traceback.format_exc()}")
     finally:
-        _cleanup_temp(temp_path)
+        cleanup_temp(temp_path)
 
 
 # ================================================================

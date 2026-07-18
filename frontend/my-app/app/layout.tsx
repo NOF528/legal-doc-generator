@@ -1,20 +1,9 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
 export const metadata: Metadata = {
-  title: "法律文档生成器",
-  description: "智能生成法律意见书、律师工作报告等法律文书",
+  title: "一只鱼律 · 历史沿革生成器",
+  description: "上传企查查报告，一键生成公司历史沿革（股权转让 / 增资 / 减资）",
 };
 
 export default function RootLayout({
@@ -23,10 +12,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN" className={`${geistSans.variable} ${geistMono.variable}`}>
-      <body className="min-h-screen bg-gray-50">
-        {children}
-      </body>
+    <html lang="zh-CN">
+      <body>{children}</body>
     </html>
   );
 }

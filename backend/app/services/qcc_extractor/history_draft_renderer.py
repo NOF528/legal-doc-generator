@@ -1,191 +1,261 @@
 """
 历史沿革草稿渲染器
 
-只根据已确认字段生成 QCC 事实草稿，不编造任何未证明内容。
+按素材模板风格输出三种变更：
+- 股权转让
+- 增资
+- 减资
+
+规则：
+- 企查查能证明的事实直接写入（登记日期、变更前后注册资本、股东名称）
+- 企查查不能证明的字段用【**】占位，并列入 missing_fields
+- 绝不编造决议日期、对价、协议签署、验资报告等内容
 """
 
 from typing import List
-from .models import ChangeEvent, HistoryDraft, ChangeType, ClassificationLevel
+from .models import ChangeEvent, HistoryDraft, ChangeType
 
 
-def _fmt_capital(val: str) -> str:
-    return val if val else "【**】"
-
-
-def _fmt_name(val: str) -> str:
-    return val if val else "【**】"
+PLACEHOLDER = "【**】"
+DATE_PLACEHOLDER = "【**年**月**日】"
 
 
 def render_qcc_drafts(events: List[ChangeEvent], company_name: str = "公司") -> List[HistoryDraft]:
-    """
-    把事件列表渲染为历史沿革草稿段落
-    """
+    """把事件列表渲染为历史沿革草稿段落"""
     drafts = []
     for event in events:
-        draft = _render_event(event, company_name)
-        drafts.append(draft)
+        if event.event_type == ChangeType.EQUITY_TRANSFER:
+            drafts.append(_render_equity_transfer(event, company_name))
+        elif event.event_type == ChangeType.CAPITAL_INCREASE:
+            drafts.append(_render_capital_increase(event, company_name))
+        elif event.event_type == ChangeType.CAPITAL_DECREASE:
+            drafts.append(_render_capital_decrease(event, company_name))
+        # 其他类型不进入历史沿革
     return drafts
 
 
-def _render_event(event: ChangeEvent, company_name: str) -> HistoryDraft:
-    """渲染单个事件"""
-    if event.event_type == ChangeType.EQUITY_TRANSFER:
-        return _render_equity_transfer(event, company_name)
-    elif event.event_type == ChangeType.SHAREHOLDER_CHANGE:
-        return _render_shareholder_change(event, company_name)
-    elif event.event_type == ChangeType.CAPITAL_CHANGE:
-        return _render_capital_change(event, company_name)
-    elif event.event_type == ChangeType.CAPITAL_INCREASE:
-        return _render_capital_increase(event, company_name)
-    elif event.event_type == ChangeType.CAPITAL_DECREASE:
-        return _render_capital_decrease(event, company_name)
-    else:
-        return _render_other_change(event, company_name)
-
-
 def _render_equity_transfer(event: ChangeEvent, company_name: str) -> HistoryDraft:
-    """渲染股权转让草稿（保守）"""
-    date = event.date
+    """股权转让（按素材模板表述）"""
+    registration_date = event.date  # 企查查记录的是工商变更登记日期
+    missing = []
 
-    exit_names = "、".join([s.name for s in event.exits if s.name]) or "【**】"
-    enter_names = "、".join([s.name for s in event.enters if s.name]) or "【**】"
+    # 决议日期无法从企查查证明
+    meeting_date = DATE_PLACEHOLDER
+    missing.append("股东会决议日期")
 
+    # 转让语句：企查查无法证明转让双方的具体配对关系，不做配对组合。
+    # 决议段按模板给出占位明细，另附一段说明本次变更实际涉及的退出方/新进方（企查查可证明）。
     lines = [
-        f"根据企查查企业信用报告，{date}，{company_name}完成投资人变更登记。",
-        f"本次登记涉及退出方：{exit_names}；新进方：{enter_names}。",
+        f"{meeting_date}，公司召开股东会并作出决议，同意以下股权转让事项：",
+        f"股东{PLACEHOLDER}将其持有的公司{PLACEHOLDER}%的股权"
+        f"（对应注册资本人民币{PLACEHOLDER}万元）以人民币{PLACEHOLDER}万元的对价转让给{PLACEHOLDER}；",
+        "（请根据股东会决议及《股权转让协议》按上述格式逐笔补充）",
+        "",
     ]
+    missing.append("转让对价")
+    missing.append("转让双方配对及各笔转让比例")
 
-    # 如果有比例/金额，列出
-    details = []
-    for s in event.exits:
-        if s.ratio or s.amount:
-            details.append(f"{s.name}原持股{_fmt_name(s.ratio)}%（对应注册资本{_fmt_name(s.amount)}万元）")
-    for s in event.enters:
-        if s.ratio or s.amount:
-            details.append(f"{s.name}持股{_fmt_name(s.ratio)}%（对应注册资本{_fmt_name(s.amount)}万元）")
+    # 企查查可证明的事实：本次变更涉及的退出方（变更前持股）与新进方（变更后持股）
+    def _describe(s) -> str:
+        parts = []
+        if s.ratio:
+            parts.append(f"持股{s.ratio}%")
+        if s.amount:
+            parts.append(f"认缴出资额{s.amount}万元")
+        return f"{s.name}（{'，'.join(parts)}）" if parts else s.name
 
-    if details:
-        lines.append("涉及股权情况：" + "；".join(details) + "。")
+    if event.exits:
+        lines.append("本次变更涉及的退出股东及其变更前持股情况：" + "、".join(_describe(s) for s in event.exits) + "。")
+    if event.enters:
+        lines.append("本次变更涉及的新进股东及其变更后持股情况：" + "、".join(_describe(s) for s in event.enters) + "。")
+    lines.append("")
 
-    lines.append(f"上述变更于{date}完成工商变更登记。")
+    # 协议签署日期无法证明（一侧名单缺失时用占位符）
+    transferor_names = "、".join(s.name for s in event.exits) or PLACEHOLDER
+    transferee_names = "、".join(s.name for s in event.enters) or PLACEHOLDER
+    lines.append(
+        f"{DATE_PLACEHOLDER}，{transferor_names}与{transferee_names}"
+        f"分别就上述股权转让事项签署了《股权转让协议》。"
+    )
+    missing.append("股权转让协议签署日期")
+    lines.append("")
 
-    text = "\n".join(lines)
+    # 变更后股权结构表
+    lines.append(f"本次股权转让完成后，{company_name}的股权结构如下：")
+    lines.append("")
+    lines.extend(_build_shareholder_table(event))
+    lines.append("")
+
+    # 工商登记日期（企查查可证明）
+    lines.append(f"{registration_date}，{company_name}完成了上述股权转让的工商变更登记程序。")
+
+    # 去重 missing
+    missing = list(dict.fromkeys(missing + event.missing_fields))
 
     return HistoryDraft(
-        date=date,
-        sequence_title=f"{date} 股权转让（待确认）",
-        draft_text=text,
+        date=registration_date,
+        sequence_title=f"{registration_date} 股权转让",
+        draft_text="\n".join(lines),
         event_type=ChangeType.EQUITY_TRANSFER,
         classification_level=event.classification_level,
-        missing_fields=event.missing_fields,
-        warnings=event.warnings + ["转让双方配对、转让对价、协议签署及股东会决议情况需律师根据实际法律文件补充。"],
-        evidence=event.evidence,
-    )
-
-
-def _render_shareholder_change(event: ChangeEvent, company_name: str) -> HistoryDraft:
-    """渲染股东变更草稿（无法确认转让关系）"""
-    date = event.date
-    exit_names = "、".join([s.name for s in event.exits if s.name]) or "【**】"
-    enter_names = "、".join([s.name for s in event.enters if s.name]) or "【**】"
-
-    lines = [
-        f"根据企查查企业信用报告，{date}，{company_name}完成投资人变更登记。",
-    ]
-
-    if event.exits and event.enters:
-        lines.append(f"登记显示退出方：{exit_names}；新进方：{enter_names}。")
-    elif event.exits:
-        lines.append(f"登记显示退出方：{exit_names}。")
-    elif event.enters:
-        lines.append(f"登记显示新进方：{enter_names}。")
-    else:
-        lines.append("登记显示投资人发生变更，但具体股东信息未能从报告中识别。")
-
-    lines.append(f"上述变更于{date}完成工商变更登记。")
-    lines.append("【注：本次股东结构变更的具体交易性质（股权转让/增资/减资/其他）及交易对价，需律师根据公司章程、股东会决议及股权转让协议等补充材料确认。】")
-
-    return HistoryDraft(
-        date=date,
-        sequence_title=f"{date} 股东结构变更（待确认）",
-        draft_text="\n".join(lines),
-        event_type=ChangeType.SHAREHOLDER_CHANGE,
-        classification_level=ClassificationLevel.UNDETERMINED,
-        missing_fields=event.missing_fields + ["变更交易性质", "转让双方配对", "交易对价"],
-        warnings=event.warnings,
-        evidence=event.evidence,
-    )
-
-
-def _render_capital_change(event: ChangeEvent, company_name: str) -> HistoryDraft:
-    """渲染注册资本变更草稿（保守，不区分增/减）"""
-    date = event.date
-    before = _fmt_capital(event.capital_before)
-    after = _fmt_capital(event.capital_after)
-
-    lines = [
-        f"根据企查查企业信用报告，{date}，{company_name}完成注册资本变更登记。",
-        f"注册资本由人民币{before}变更为人民币{after}。",
-        f"上述变更于{date}完成工商变更登记。",
-        "【注：本次注册资本变更的具体性质（增资/减资）、出资方/减资方、股东会决议、验资/公告程序等，需律师根据实际法律文件补充确认。】",
-    ]
-
-    return HistoryDraft(
-        date=date,
-        sequence_title=f"{date} 注册资本变更（待确认）",
-        draft_text="\n".join(lines),
-        event_type=ChangeType.CAPITAL_CHANGE,
-        classification_level=event.classification_level,
-        missing_fields=event.missing_fields,
+        missing_fields=missing,
         warnings=event.warnings,
         evidence=event.evidence,
     )
 
 
 def _render_capital_increase(event: ChangeEvent, company_name: str) -> HistoryDraft:
-    """渲染增资草稿（仅在有明确证据时使用）"""
-    return _render_capital_change(event, company_name)
+    """增资（按素材模板表述）"""
+    registration_date = event.date
+    missing = []
 
+    meeting_date = DATE_PLACEHOLDER
+    missing.append("股东会决议日期")
 
-def _render_capital_decrease(event: ChangeEvent, company_name: str) -> HistoryDraft:
-    """渲染减资草稿（仅在有明确证据时使用）"""
-    return _render_capital_change(event, company_name)
+    original_capital = event.capital_before or PLACEHOLDER
+    new_capital = event.capital_after or PLACEHOLDER
 
+    lines = [
+        f"{meeting_date}，公司召开股东会并作出决议："
+        f"公司注册资本由人民币{original_capital}变更为人民币{new_capital}。",
+    ]
 
-def _render_other_change(event: ChangeEvent, company_name: str) -> HistoryDraft:
-    """渲染其他变更草稿"""
-    date = event.date
-    project = event.event_type.value
-    before = event.known_facts.get("变更前", "")
-    after = event.known_facts.get("变更后", "")
+    # 认购方信息：企查查只能看到新进股东，认购金额无法证明
+    if event.enters:
+        subscribe_statements = []
+        for enter_sh in event.enters:
+            capital = enter_sh.amount or PLACEHOLDER
+            subscribe_statements.append(
+                f"同意{enter_sh.name}以人民币{PLACEHOLDER}万元认购公司新增的注册资本人民币{capital}万元"
+            )
+        lines.append("；".join(subscribe_statements) + "。")
+    else:
+        lines.append(
+            f"同意{PLACEHOLDER}以人民币{PLACEHOLDER}万元认购公司新增的注册资本人民币{PLACEHOLDER}万元。"
+        )
+    missing.append("增资认购方及认购金额")
+    lines.append("")
 
-    lines = [f"根据企查查企业信用报告，{date}，{company_name}完成{project}登记。"]
-    if before and after:
-        lines.append(f"变更前：{before}；变更后：{after}。")
-    elif after:
-        lines.append(f"变更后：{after}。")
+    # 变更后股权结构表
+    lines.append(f"本次增资完成后，{company_name}的股权结构如下：")
+    lines.append("")
+    lines.extend(_build_shareholder_table(event))
+    lines.append("")
 
-    lines.append(f"上述变更于{date}完成工商变更登记。")
+    # 工商登记日期
+    lines.append(f"{registration_date}，{company_name}完成了上述增资的工商变更登记程序。")
+
+    # 验资报告占位（素材模板为可选段）
+    lines.append("")
+    lines.append(
+        f"{DATE_PLACEHOLDER}，{PLACEHOLDER}出具了《验资报告》（{PLACEHOLDER}），"
+        f"截至{DATE_PLACEHOLDER}，公司已收到{PLACEHOLDER}缴纳的新增注册资本人民币{PLACEHOLDER}万元，"
+        f"计入资本公积{PLACEHOLDER}万元。"
+    )
+    missing.extend(["验资报告编号", "验资机构", "出资缴付截止日期", "计入资本公积金额"])
+
+    missing = list(dict.fromkeys(missing + event.missing_fields))
 
     return HistoryDraft(
-        date=date,
-        sequence_title=f"{date} {project}",
+        date=registration_date,
+        sequence_title=f"{registration_date} 增资",
         draft_text="\n".join(lines),
-        event_type=event.event_type,
+        event_type=ChangeType.CAPITAL_INCREASE,
         classification_level=event.classification_level,
-        missing_fields=[],
-        warnings=[],
+        missing_fields=missing,
+        warnings=event.warnings,
         evidence=event.evidence,
     )
 
 
+def _render_capital_decrease(event: ChangeEvent, company_name: str) -> HistoryDraft:
+    """减资（按素材模板表述）"""
+    registration_date = event.date
+    missing = []
+
+    meeting_date = DATE_PLACEHOLDER
+    missing.append("股东会决议日期")
+
+    original_capital = event.capital_before or PLACEHOLDER
+    new_capital = event.capital_after or PLACEHOLDER
+
+    lines = [
+        f"{meeting_date}，公司召开股东会并作出决议："
+        f"同意将原注册资本{original_capital}变更为{new_capital}，并对公司章程进行相应修改。"
+        f"{company_name}本次注册资本{original_capital}变更为{new_capital}由全体股东按照同比例减资。",
+        "",
+        # 减资公告段（素材模板必填，但企查查无法证明）
+        f"{DATE_PLACEHOLDER}，公司就上述减资事宜于{PLACEHOLDER}刊登了减资公告："
+        f"经股东会作出决议，拟将公司注册资本由人民币{original_capital}减至人民币{new_capital}。"
+        f"根据《中华人民共和国公司法》等相关法律、法规的规定，公司特此通知债权人，"
+        f"请公司债权人自本公告见报之日起{PLACEHOLDER}日内到本公司申报债权。"
+        f"本公司承诺对原注册资本内的债务承担清偿责任，股东承担连带责任。",
+        "",
+    ]
+    missing.extend(["减资公告刊登媒体", "减资公告日期", "债权人申报期限"])
+
+    # 变更后股权结构表
+    lines.append(f"本次减资完成后，{company_name}的股权结构如下：")
+    lines.append("")
+    lines.extend(_build_shareholder_table(event))
+    lines.append("")
+
+    # 工商登记日期
+    lines.append(f"{registration_date}，{company_name}完成了上述减资事宜的工商变更登记程序。")
+
+    missing = list(dict.fromkeys(missing + event.missing_fields))
+
+    return HistoryDraft(
+        date=registration_date,
+        sequence_title=f"{registration_date} 减资",
+        draft_text="\n".join(lines),
+        event_type=ChangeType.CAPITAL_DECREASE,
+        classification_level=event.classification_level,
+        missing_fields=missing,
+        warnings=event.warnings,
+        evidence=event.evidence,
+    )
+
+
+def _build_shareholder_table(event: ChangeEvent) -> List[str]:
+    """
+    构建变更后股权结构表。
+
+    企查查变更记录通常不含完整的变更后股东名册，
+    因此只能列出本次变更涉及的股东，其余用占位符。
+    """
+    lines = [
+        "| 序号 | 股东名称/姓名 | 出资额（万元） | 出资比例 |",
+        "|:---:|:---:|:---:|:---:|",
+    ]
+
+    shareholders = event.known_facts.get("shareholders_after", [])
+    if shareholders:
+        # 有完整数据时（目前企查查提取不到，预留）
+        for i, s in enumerate(shareholders, 1):
+            lines.append(f"| {i} | {s.get('name', PLACEHOLDER)} | {s.get('amount', PLACEHOLDER)} | {s.get('ratio', PLACEHOLDER)}% |")
+    else:
+        # 新进方的持股为变更后状态，可列出；退出方变更后不再持股，不列入
+        idx = 1
+        for s in event.enters:
+            ratio = s.ratio or PLACEHOLDER
+            amount = s.amount or PLACEHOLDER
+            lines.append(f"| {idx} | {s.name} | {amount} | {ratio}% |")
+            idx += 1
+        lines.append(f"| {idx} | 其余股东{PLACEHOLDER} | {PLACEHOLDER} | {PLACEHOLDER}% |")
+
+    total = event.capital_after or PLACEHOLDER
+    lines.append(f"| 合计 | - | {total} | 100.0000% |")
+
+    return lines
+
+
 def combine_drafts(drafts: List[HistoryDraft]) -> str:
-    """合并草稿为完整历史沿革文本"""
+    """合并草稿为完整历史沿革文本（每段前加标题，方便 Word 分节）"""
     sections = []
     for d in drafts:
         sections.append(f"【{d.sequence_title}】")
+        sections.append("")
         sections.append(d.draft_text)
-        if d.missing_fields:
-            sections.append(f"【待补充字段】{'; '.join(d.missing_fields)}")
         sections.append("")
     return "\n".join(sections)

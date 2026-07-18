@@ -1,17 +1,16 @@
 """
 事件分类器
 
-把 ChangeFact 归一化为 ChangeEvent，分类规则保守：
-- 注册资本上升/下降 → 先只认定"注册资本变更"
-- 投资人变更 → 先只认定"股东变更"
-- 有明确转让双方证据时 → 才升级为"股权转让"
-- 同日多项变更 → 拆分为多个事件
+历史沿革只包含三种变更：
+- 股权转让（投资人变更且能识别进出方）
+- 增资（注册资本增加）
+- 减资（注册资本减少）
 
-绝不在此层生成律师文本。
+其他工商变更（名称、地址、法定代表人、经营范围等）不计入历史沿革。
 """
 
 import re
-from typing import List, Dict, Tuple
+from typing import List
 from collections import defaultdict
 from .models import ChangeFact, ChangeEvent, ChangeType, ClassificationLevel, ShareholderSnapshot
 from .shareholder_diff import parse_shareholder_change
@@ -32,7 +31,13 @@ def _extract_capital_number(text: str) -> float:
 
 
 def _format_capital(text: str) -> str:
-    """格式化资本显示"""
+    """格式化资本显示，如 84,059.1737万元"""
+    if not text:
+        return ""
+    text = str(text)
+    match = re.search(r'([\d,]+(?:\.\d+)?)\s*万元', text)
+    if match:
+        return match.group(1) + "万元"
     num = _extract_capital_number(text)
     if num > 0:
         return f"{num:,.4f}".rstrip("0").rstrip(".") + "万元"
@@ -51,46 +56,45 @@ def _is_shareholder_project(project: str) -> bool:
 
 def classify_events(facts: List[ChangeFact], company_name: str = "公司") -> List[ChangeEvent]:
     """
-    主入口：把事实列表分类为事件列表
+    主入口：把事实列表分类为事件列表。
+    只输出三种历史沿革事件：股权转让 / 增资 / 减资。
+    按时间正序排列（先发生的在前）。
     """
     # 按日期分组
     grouped = defaultdict(list)
     for fact in facts:
-        grouped[fact.raw_date].append(fact)
+        if fact.raw_date:
+            grouped[fact.raw_date].append(fact)
 
     events = []
     for raw_date in sorted(grouped.keys()):
         date_facts = grouped[raw_date]
         display_date = date_facts[0].date if date_facts else ""
 
-        # 分离资本类事实和股东类事实
         capital_facts = [f for f in date_facts if _is_capital_project(f.project)]
         shareholder_facts = [f for f in date_facts if _is_shareholder_project(f.project)]
-        other_facts = [f for f in date_facts if f not in capital_facts and f not in shareholder_facts]
+        # 其他项目（名称/地址/法代/经营范围等）直接忽略，不计入历史沿革
 
-        # 1. 处理资本变更事件
+        # 1. 注册资本变更 → 增资 / 减资
         if capital_facts:
-            event = _build_capital_event(display_date, raw_date, capital_facts, company_name)
-            events.append(event)
+            event = _build_capital_event(display_date, raw_date, capital_facts)
+            if event:
+                events.append(event)
 
-        # 2. 处理股东变更事件（每个事实可能产生一个事件，避免强行合并）
-        for fact in shareholder_facts:
-            event = _build_shareholder_event(display_date, raw_date, [fact], company_name)
-            events.append(event)
-
-        # 3. 处理其他变更事件
-        for fact in other_facts:
-            event = _build_other_event(display_date, raw_date, fact)
-            events.append(event)
+        # 2. 投资人变更 → 股权转让
+        # 同一天的多条投资人记录合并为一个事件（一次交易可能在企查查里显示为多行）
+        if shareholder_facts:
+            event = _build_shareholder_event(display_date, raw_date, shareholder_facts)
+            if event:
+                events.append(event)
 
     return events
 
 
-def _build_capital_event(display_date: str, raw_date: str, facts: List[ChangeFact], company_name: str) -> ChangeEvent:
-    """构建注册资本变更事件"""
+def _build_capital_event(display_date: str, raw_date: str, facts: List[ChangeFact]) -> ChangeEvent | None:
+    """构建增资或减资事件。无法判断方向的返回 None。"""
     before_text = ""
     after_text = ""
-
     for f in facts:
         if f.before:
             before_text = f.before
@@ -100,37 +104,26 @@ def _build_capital_event(display_date: str, raw_date: str, facts: List[ChangeFac
     before_num = _extract_capital_number(before_text)
     after_num = _extract_capital_number(after_text)
 
-    capital_before = _format_capital(before_text) if before_num > 0 else ""
-    capital_after = _format_capital(after_text) if after_num > 0 else ""
+    if before_num <= 0 or after_num <= 0 or before_num == after_num:
+        return None
 
-    # 判断是增加还是减少，但输出保守标签
-    if after_num > before_num > 0:
-        event_type = ChangeType.CAPITAL_CHANGE
-        inferred_type = ChangeType.CAPITAL_INCREASE
-        level = ClassificationLevel.INFERRED
-    elif 0 < after_num < before_num:
-        event_type = ChangeType.CAPITAL_CHANGE
-        inferred_type = ChangeType.CAPITAL_DECREASE
-        level = ClassificationLevel.INFERRED
+    capital_before = _format_capital(before_text)
+    capital_after = _format_capital(after_text)
+
+    if after_num > before_num:
+        event_type = ChangeType.CAPITAL_INCREASE
+        missing_fields = ["股东会决议日期", "增资认购方", "认购金额", "出资期限", "验资报告编号"]
+        warnings = ["增资的认购方、认购金额、出资期限及验资情况，需根据股东会决议及验资报告补充。"]
     else:
-        event_type = ChangeType.CAPITAL_CHANGE
-        inferred_type = ChangeType.CAPITAL_CHANGE
-        level = ClassificationLevel.UNDETERMINED
-
-    missing_fields = ["股东会决议日期", "章程修订情况"]
-    if inferred_type == ChangeType.CAPITAL_INCREASE:
-        missing_fields.extend(["增资认购方", "认购金额", "出资期限", "验资报告编号"])
-    elif inferred_type == ChangeType.CAPITAL_DECREASE:
-        missing_fields.extend(["减资决议日期", "减资公告刊登媒体", "公告日期", "债权人申报情况"])
-
-    warnings = [f"根据工商公示信息，{company_name}于{display_date}完成注册资本变更登记。"
-                f"变更性质（增/减）为系统推断，需律师根据股东会决议及验资/公告材料确认。"]
+        event_type = ChangeType.CAPITAL_DECREASE
+        missing_fields = ["股东会决议日期", "减资公告刊登媒体", "公告日期", "债权人申报情况"]
+        warnings = ["减资的股东会决议、公告刊登及债权人申报程序，需根据实际法律文件补充。"]
 
     return ChangeEvent(
         date=display_date,
         raw_date=raw_date,
         event_type=event_type,
-        classification_level=level,
+        classification_level=ClassificationLevel.CONFIRMED,
         facts=facts,
         evidence=[f.evidence for f in facts],
         known_facts={
@@ -145,8 +138,8 @@ def _build_capital_event(display_date: str, raw_date: str, facts: List[ChangeFac
     )
 
 
-def _build_shareholder_event(display_date: str, raw_date: str, facts: List[ChangeFact], company_name: str) -> ChangeEvent:
-    """构建股东变更事件"""
+def _build_shareholder_event(display_date: str, raw_date: str, facts: List[ChangeFact]) -> ChangeEvent | None:
+    """构建股权转让事件。能识别进出方才输出，否则返回 None。"""
     exits: List[ShareholderSnapshot] = []
     enters: List[ShareholderSnapshot] = []
 
@@ -155,39 +148,33 @@ def _build_shareholder_event(display_date: str, raw_date: str, facts: List[Chang
         exits.extend(e)
         enters.extend(n)
 
-    # 默认保守分类为股东变更
-    event_type = ChangeType.SHAREHOLDER_CHANGE
-    level = ClassificationLevel.CONFIRMED
-    missing_fields = ["股东会决议日期"]
-    warnings = []
+    # 去重
+    exits = _dedup(exits)
+    enters = _dedup(enters)
 
-    # 如果能同时识别到退出方和新进方，升级为股权转让（inferred）
-    if exits and enters:
-        event_type = ChangeType.EQUITY_TRANSFER
-        level = ClassificationLevel.INFERRED
-        missing_fields.extend(["转让对价", "股权转让协议签署日期", "优先购买权情况"])
-        warnings.append(
-            f"系统识别到{display_date}存在投资人退出和新进，"
-            f"初步推断为股权转让，但转让双方配对、对价、协议签署情况等需律师根据"
-            f"股权转让协议及股东会决议确认。"
-        )
-    elif exits or enters:
-        warnings.append(
-            f"根据工商公示信息，{company_name}于{display_date}发生投资人变更。"
-            f"由于变更记录仅显示部分股东信息，转让关系、对价等需律师补充核实。"
-        )
-    else:
-        level = ClassificationLevel.UNDETERMINED
-        warnings.append(
-            f"根据工商公示信息，{company_name}于{display_date}发生投资人变更登记，"
-            f"但系统未能从文本中识别具体股东信息。"
-        )
+    # 至少识别到退出方或新进方之一才输出；另一侧缺失时由律师补充。
+    # （企查查变更记录常因分页/错位导致一侧信息缺失，宁可占位提示也不丢弃真实事件）
+    if not exits and not enters:
+        return None
+
+    missing_fields = [
+        "股东会决议日期",
+        "转让对价",
+        "股权转让协议签署日期",
+        "优先购买权情况",
+        "变更后完整股权结构",
+    ]
+    if not enters:
+        missing_fields.append("新进方/受让方信息（企查查记录未完整显示）")
+    if not exits:
+        missing_fields.append("退出方/转让方信息（企查查记录未完整显示）")
+    warnings = ["转让双方的具体配对、转让对价及协议签署情况，需根据股东会决议及股权转让协议确认。"]
 
     return ChangeEvent(
         date=display_date,
         raw_date=raw_date,
-        event_type=event_type,
-        classification_level=level,
+        event_type=ChangeType.EQUITY_TRANSFER,
+        classification_level=ClassificationLevel.INFERRED,
         facts=facts,
         evidence=[f.evidence for f in facts],
         known_facts={
@@ -202,34 +189,12 @@ def _build_shareholder_event(display_date: str, raw_date: str, facts: List[Chang
     )
 
 
-def _build_other_event(display_date: str, raw_date: str, fact: ChangeFact) -> ChangeEvent:
-    """构建其他类型事件"""
-    project = fact.project
-
-    if "名称" in project:
-        event_type = ChangeType.NAME_CHANGE
-    elif "法定代表人" in project or "法人" in project:
-        event_type = ChangeType.LEGAL_REP_CHANGE
-    elif "地址" in project or "住所" in project:
-        event_type = ChangeType.ADDRESS_CHANGE
-    elif "经营范围" in project:
-        event_type = ChangeType.SCOPE_CHANGE
-    else:
-        event_type = ChangeType.OTHER
-
-    return ChangeEvent(
-        date=display_date,
-        raw_date=raw_date,
-        event_type=event_type,
-        classification_level=ClassificationLevel.CONFIRMED,
-        facts=[fact],
-        evidence=[fact.evidence],
-        known_facts={
-            "登记日期": display_date,
-            "变更项目": project,
-            "变更前": fact.before,
-            "变更后": fact.after,
-        },
-        missing_fields=[],
-        warnings=[],
-    )
+def _dedup(snapshots: List[ShareholderSnapshot]) -> List[ShareholderSnapshot]:
+    """按名称去重"""
+    seen = set()
+    result = []
+    for s in snapshots:
+        if s.name and s.name not in seen:
+            seen.add(s.name)
+            result.append(s)
+    return result
