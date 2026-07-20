@@ -19,7 +19,7 @@ import re
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from docx import Document
-from docx.shared import Pt, Cm
+from docx.shared import Pt, Cm, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
@@ -27,11 +27,23 @@ from docx.oxml import OxmlElement
 
 
 class HistoryDocxGenerator:
-    """历史沿革Word文档生成器"""
-    
+    """历史沿革Word文档生成器
+
+    格式规范：
+    - 标题：四号（14pt）加粗
+    - 正文：小四（12pt）不加粗，1.25 倍行距，段前段后各 0.5 行
+    - 中文宋体，英文和数字 Times New Roman
+    """
+
+    CN_FONT = '宋体'           # 中文字体
+    EN_FONT = 'Times New Roman'  # 英文/数字字体
+    TITLE_SIZE = Pt(14)        # 四号
+    BODY_SIZE = Pt(12)         # 小四
+    LINE_SPACING = 1.25        # 1.25 倍行距
+
     def __init__(self):
-        self.default_font = '宋号'
-        self.default_font_size = Pt(12)
+        self.default_font = self.CN_FONT
+        self.default_font_size = self.BODY_SIZE
     
     def generate_from_template(
         self,
@@ -178,10 +190,11 @@ class HistoryDocxGenerator:
         # 设置文档默认字体
         self._set_document_default_font(doc)
         
-        # 添加标题
+        # 添加标题（四号加粗居中）
         title = doc.add_heading(f"{company_name}历史沿革", level=1)
         title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        self._set_run_font(title.runs[0], font_size=Pt(18), bold=True)
+        self._set_run_font(title.runs[0], font_size=self.TITLE_SIZE, bold=True)
+        title.runs[0].font.color.rgb = RGBColor(0, 0, 0)
         
         # 解析并添加历史沿革内容
         self._add_history_content(doc, history_text)
@@ -190,22 +203,50 @@ class HistoryDocxGenerator:
         doc.save(output_path)
     
     def _set_document_default_font(self, doc: Document):
-        """设置文档默认字体"""
+        """设置文档默认字体：中文宋体，英文/数字 Times New Roman"""
         style = doc.styles['Normal']
         font = style.font
-        font.name = self.default_font
+        font.name = self.EN_FONT
         font.size = self.default_font_size
-        # 设置中文字体
-        style.element.rPr.rFonts.set(qn('w:eastAsia'), self.default_font)
-    
+        rpr = style.element.get_or_add_rPr()
+        rfonts = rpr.find(qn('w:rFonts'))
+        if rfonts is None:
+            rfonts = OxmlElement('w:rFonts')
+            rpr.append(rfonts)
+        rfonts.set(qn('w:ascii'), self.EN_FONT)
+        rfonts.set(qn('w:hAnsi'), self.EN_FONT)
+        rfonts.set(qn('w:eastAsia'), self.CN_FONT)
+        rfonts.set(qn('w:cs'), self.EN_FONT)
+
     def _set_run_font(self, run, font_name: str = None, font_size: Pt = None, bold: bool = False):
-        """设置文本run的字体"""
-        if font_name:
-            run.font.name = font_name
-            run.element.rPr.rFonts.set(qn('w:eastAsia'), font_name)
+        """设置文本run的字体：中文宋体，英文/数字 Times New Roman"""
+        run.font.name = self.EN_FONT
+        rpr = run._element.get_or_add_rPr()
+        rfonts = rpr.find(qn('w:rFonts'))
+        if rfonts is None:
+            rfonts = OxmlElement('w:rFonts')
+            rpr.append(rfonts)
+        rfonts.set(qn('w:ascii'), self.EN_FONT)
+        rfonts.set(qn('w:hAnsi'), self.EN_FONT)
+        rfonts.set(qn('w:eastAsia'), font_name or self.CN_FONT)
+        rfonts.set(qn('w:cs'), self.EN_FONT)
         if font_size:
             run.font.size = font_size
         run.font.bold = bold
+
+    def _set_para_format(self, para, first_line_indent: bool = False):
+        """设置正文段落格式：1.25 倍行距，段前段后各 0.5 行"""
+        para.paragraph_format.line_spacing = self.LINE_SPACING
+        # 段前段后 0.5 行（beforeLines/afterLines 单位为 1/100 行）
+        ppr = para._p.get_or_add_pPr()
+        spacing = ppr.find(qn('w:spacing'))
+        if spacing is None:
+            spacing = OxmlElement('w:spacing')
+            ppr.append(spacing)
+        spacing.set(qn('w:beforeLines'), '50')
+        spacing.set(qn('w:afterLines'), '50')
+        if first_line_indent:
+            para.paragraph_format.first_line_indent = Cm(0.74)  # 首行缩进2字符
     
     def _add_history_content(self, doc: Document, history_text: str):
         """添加历史沿革内容（解析Markdown格式）"""
@@ -220,13 +261,15 @@ class HistoryDocxGenerator:
                 i += 1
                 continue
             
-            # 处理序号标题行：【2025年10月11日 股权转让】
+            # 处理序号标题行：【2025年10月11日 股权转让】（四号加粗）
             if line.startswith('【') and line.endswith('】'):
                 heading_text = line[1:-1]  # 去掉【】
                 heading = doc.add_heading(heading_text, level=2)
                 heading.alignment = WD_ALIGN_PARAGRAPH.LEFT
                 if heading.runs:
-                    self._set_run_font(heading.runs[0], font_size=Pt(14), bold=True)
+                    self._set_run_font(heading.runs[0], font_size=self.TITLE_SIZE, bold=True)
+                    heading.runs[0].font.color.rgb = RGBColor(0, 0, 0)
+                self._set_para_format(heading)
                 i += 1
                 continue
             
@@ -242,13 +285,12 @@ class HistoryDocxGenerator:
                     self._add_shareholder_table(doc, table_lines)
                 continue
             
-            # 处理普通段落
+            # 处理普通段落（小四不加粗，1.25 倍行距，段前段后 0.5 行）
             if line:
                 para = doc.add_paragraph(line)
-                para.paragraph_format.line_spacing = 1.5
-                para.paragraph_format.first_line_indent = Cm(0.74)  # 首行缩进2字符
+                self._set_para_format(para, first_line_indent=True)
                 for run in para.runs:
-                    self._set_run_font(run, font_size=Pt(12))
+                    self._set_run_font(run, font_size=self.BODY_SIZE)
             
             i += 1
     
@@ -269,13 +311,7 @@ class HistoryDocxGenerator:
         
         if not data_rows:
             return
-        
-        # 添加表格说明文字
-        intro_para = doc.add_paragraph("本次增资和股权转让完成后，公司的股权结构如下：")
-        intro_para.paragraph_format.line_spacing = 1.5
-        for run in intro_para.runs:
-            self._set_run_font(run, font_size=Pt(12))
-        
+
         # 创建表格
         table = doc.add_table(rows=len(data_rows) + 1, cols=len(headers))
         table.style = 'Table Grid'
@@ -285,7 +321,7 @@ class HistoryDocxGenerator:
         table.autofit = False
         table.allow_autofit = False
         
-        # 添加表头
+        # 添加表头（小四加粗）
         header_cells = table.rows[0].cells
         for i, header in enumerate(headers):
             cell = header_cells[i]
@@ -293,13 +329,13 @@ class HistoryDocxGenerator:
             for paragraph in cell.paragraphs:
                 paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 for run in paragraph.runs:
-                    self._set_run_font(run, font_size=Pt(12), bold=True)
+                    self._set_run_font(run, font_size=self.BODY_SIZE, bold=True)
             # 设置背景色
             shading = OxmlElement('w:shd')
             shading.set(qn('w:fill'), 'D9D9D9')
             cell._element.get_or_add_tcPr().append(shading)
         
-        # 添加数据行
+        # 添加数据行（小四不加粗）
         for row_idx, row_data in enumerate(data_rows):
             row_cells = table.rows[row_idx + 1].cells
             for col_idx, cell_text in enumerate(row_data):
@@ -309,7 +345,7 @@ class HistoryDocxGenerator:
                     for paragraph in cell.paragraphs:
                         paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
                         for run in paragraph.runs:
-                            self._set_run_font(run, font_size=Pt(12))
+                            self._set_run_font(run, font_size=self.BODY_SIZE)
         
         # 设置列宽
         self._set_table_column_widths(table)

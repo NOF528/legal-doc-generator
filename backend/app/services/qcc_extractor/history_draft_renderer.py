@@ -55,24 +55,54 @@ def _render_equity_transfer(event: ChangeEvent, company_name: str) -> HistoryDra
     missing.append("转让对价")
     missing.append("转让双方配对及各笔转让比例")
 
-    # 企查查可证明的事实：本次变更涉及的退出方（变更前持股）与新进方（变更后持股）
+    # 企查查可证明的事实：本次变更涉及的转让方（变更前→变更后持股）与受让方（变更后持股）
+    transferors = event.known_facts.get("转让方", [])
+    transferees = event.known_facts.get("受让方", [])
+
+    full_name = _name_fixer(event)
+
+    transfer_parts = []
+    for s in event.exits:
+        name = full_name(s.name)
+        if s.ratio:
+            transfer_parts.append(f"{name}（变更前持股{s.ratio}%，变更后不再持股）")
+        else:
+            transfer_parts.append(f"{name}（变更后不再持股）")
+    for t in transferors:
+        name = full_name(t["name"])
+        if t.get("before") and t.get("after"):
+            transfer_parts.append(f"{name}（变更前持股{t['before']}%，变更后持股{t['after']}%）")
+        else:
+            transfer_parts.append(name)
+    if transfer_parts:
+        lines.append("本次变更涉及的转让方及其持股变动情况：" + "、".join(transfer_parts) + "。")
+
     def _describe(s) -> str:
         parts = []
         if s.ratio:
             parts.append(f"持股{s.ratio}%")
         if s.amount:
             parts.append(f"认缴出资额{s.amount}万元")
-        return f"{s.name}（{'，'.join(parts)}）" if parts else s.name
+        return f"{full_name(s.name)}（{'，'.join(parts)}）" if parts else full_name(s.name)
 
-    if event.exits:
-        lines.append("本次变更涉及的退出股东及其变更前持股情况：" + "、".join(_describe(s) for s in event.exits) + "。")
-    if event.enters:
-        lines.append("本次变更涉及的新进股东及其变更后持股情况：" + "、".join(_describe(s) for s in event.enters) + "。")
+    transferee_parts = [_describe(s) for s in event.enters]
+    for t in transferees:
+        name = full_name(t["name"])
+        if t.get("after"):
+            transferee_parts.append(f"{name}（变更后持股{t['after']}%）")
+        else:
+            transferee_parts.append(name)
+    if transferee_parts:
+        lines.append("本次变更涉及的受让方及其变更后持股情况：" + "、".join(transferee_parts) + "。")
     lines.append("")
 
     # 协议签署日期无法证明（一侧名单缺失时用占位符）
-    transferor_names = "、".join(s.name for s in event.exits) or PLACEHOLDER
-    transferee_names = "、".join(s.name for s in event.enters) or PLACEHOLDER
+    transferor_names = "、".join(dict.fromkeys(
+        [full_name(s.name) for s in event.exits] + [full_name(t["name"]) for t in transferors]
+    )) or PLACEHOLDER
+    transferee_names = "、".join(dict.fromkeys(
+        [full_name(s.name) for s in event.enters] + [full_name(t["name"]) for t in transferees]
+    )) or PLACEHOLDER
     lines.append(
         f"{DATE_PLACEHOLDER}，{transferor_names}与{transferee_names}"
         f"分别就上述股权转让事项签署了《股权转让协议》。"
@@ -217,13 +247,40 @@ def _render_capital_decrease(event: ChangeEvent, company_name: str) -> HistoryDr
     )
 
 
+def _norm_key(name: str) -> str:
+    import re as _re
+    return _re.sub(r'[\s;；、，,]+', '', name or '').replace('（', '(').replace('）', ')').rstrip('*＊')
+
+
+def _name_fixer(event: ChangeEvent):
+    """返回一个函数：把跨页截断的股东名补全为变更后名册中的全名"""
+    roster_names = [s.get("name", "") for s in event.known_facts.get("shareholders_after", [])]
+    keys = {_norm_key(n): n for n in roster_names if n}
+
+    def fix(name: str) -> str:
+        if not name:
+            return name
+        k = _norm_key(name)
+        if k in keys:
+            return keys[k]
+        for rk, full in keys.items():
+            if rk and (rk.startswith(k) or k.startswith(rk)):
+                return full
+        return name
+
+    return fix
+
+
 def _build_shareholder_table(event: ChangeEvent) -> List[str]:
     """
     构建变更后股权结构表。
 
-    企查查变更记录通常不含完整的变更后股东名册，
-    因此只能列出本次变更涉及的股东，其余用占位符。
+    优先使用 equity_structure 计算的完整变更后名册（2.2 倒推 + 2.7 直读），
+    缺失字段用【**】占位；无完整名册时退回只列新进方 + 其余股东占位。
     """
+    def _val(v) -> str:
+        return str(v) if v not in (None, "") else PLACEHOLDER
+
     lines = [
         "| 序号 | 股东名称/姓名 | 出资额（万元） | 出资比例 |",
         "|:---:|:---:|:---:|:---:|",
@@ -231,9 +288,9 @@ def _build_shareholder_table(event: ChangeEvent) -> List[str]:
 
     shareholders = event.known_facts.get("shareholders_after", [])
     if shareholders:
-        # 有完整数据时（目前企查查提取不到，预留）
+        # 完整变更后名册（逻辑一倒推 + 逻辑二直读计算得出）
         for i, s in enumerate(shareholders, 1):
-            lines.append(f"| {i} | {s.get('name', PLACEHOLDER)} | {s.get('amount', PLACEHOLDER)} | {s.get('ratio', PLACEHOLDER)}% |")
+            lines.append(f"| {i} | {_val(s.get('name'))} | {_val(s.get('amount'))} | {_val(s.get('ratio'))}% |")
     else:
         # 新进方的持股为变更后状态，可列出；退出方变更后不再持股，不列入
         idx = 1

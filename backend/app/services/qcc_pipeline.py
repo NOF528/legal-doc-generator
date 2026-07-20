@@ -31,7 +31,7 @@ from app.services.qcc_extractor.models import (
     ReviewIssue,
 )
 from app.services.qcc_extractor.change_record_parser import parse_change_records, normalize_date, format_date
-from app.services.qcc_extractor.event_classifier import classify_events
+from app.services.qcc_extractor.event_classifier import classify_events, _extract_capital_number
 from app.services.qcc_extractor.history_draft_renderer import render_qcc_drafts, combine_drafts
 from app.services.qcc_extractor.review_rules import full_review
 from app.services.qcc_extractor.history_docx_generator import generate_history_word_document
@@ -142,8 +142,8 @@ class QCCProcessingService:
     # ================================================================
     # Step 4: Classify
     # ================================================================
-    def classify(self, report: Report) -> Report:
-        """对变更记录分类为事件"""
+    def _classify_events(self, report: Report):
+        """解析变更记录并分类为事件（含变更后股权结构计算）"""
         raw_changes = [
             {
                 "seq": ch.seq,
@@ -158,7 +158,26 @@ class QCCProcessingService:
         ]
 
         facts = parse_change_records(raw_changes)
-        events = classify_events(facts, report.company_name)
+
+        # 2.2 最新股东 + 最新注册资本，用于倒推每次变更后的股权结构
+        current_shareholders = [
+            {"name": s.name, "ratio": s.ratio, "amount": s.amount}
+            for s in report.current_shareholders
+        ]
+        current_capital = _extract_capital_number(
+            (report.registration or {}).get("注册资本", "")
+        )
+
+        return classify_events(
+            facts,
+            report.company_name,
+            current_shareholders=current_shareholders,
+            current_capital=current_capital,
+        )
+
+    def classify(self, report: Report) -> Report:
+        """对变更记录分类为事件"""
+        events = self._classify_events(report)
 
         # 转换回 pipeline 模型
         for event in events:
@@ -188,21 +207,7 @@ class QCCProcessingService:
     # ================================================================
     def draft(self, report: Report) -> Report:
         """生成历史沿革草稿"""
-        raw_changes = [
-            {
-                "seq": ch.seq,
-                "date": ch.raw_date,
-                "project": ch.project,
-                "before": ch.before,
-                "after": ch.after,
-                "source": ch.source,
-                "page_nos": ch.page_nos,
-            }
-            for ch in report.extracted_changes
-        ]
-
-        facts = parse_change_records(raw_changes)
-        events = classify_events(facts, report.company_name)
+        events = self._classify_events(report)
         drafts = render_qcc_drafts(events, report.company_name)
 
         # 转换为 pipeline 模型

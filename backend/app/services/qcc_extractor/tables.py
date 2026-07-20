@@ -360,8 +360,15 @@ def parse_change_record(lines: List[str]) -> List[Dict]:
                 # 匹配 "12025-11-17" 格式：序号+日期
                 if re.match(r"^\d+\d{4}-\d{2}-\d{2}", next_line) and '-' in next_line[:10]:
                     # 进一步验证：确保看起来像日期（防止数字行误匹配）
-                    # 日期后面应该有变更项目或明显是新的开始
-                    if re.search(r"\d{4}-\d{2}-\d{2}.*(?:变更|备案|登记)", next_line):
+                    # 情况1：日期后面同一行跟着变更项目
+                    is_new_record = bool(re.search(r"\d{4}-\d{2}-\d{2}.*(?:变更|备案|登记)", next_line))
+                    # 情况2：序号+日期独占一行 → 必为新记录
+                    # （股东名册/金额等内容行不会出现 "序号+YYYY-MM-DD" 独占一行的情况，
+                    #  因此无需再看下一行是否是变更项目，避免 "其他董事信息" 等
+                    #  无关键词项目被吞进上一条记录）
+                    if not is_new_record and re.fullmatch(r"\d{1,3}\d{4}-\d{2}-\d{2}", next_line):
+                        is_new_record = True
+                    if is_new_record:
                         break
                 # 终止条件：章节标题（如 "2.1 工商信息"）
                 # 注意：不要匹配金额行（如 "2740.286200 万元"）
