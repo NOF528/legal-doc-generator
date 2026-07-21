@@ -67,18 +67,20 @@ def _clean_change_text(text: str) -> str:
 
 class Entry:
     """一条股东记录"""
-    __slots__ = ("name", "ratio", "amount", "is_new", "is_exit", "delta")
+    __slots__ = ("name", "ratio", "amount", "is_new", "is_exit", "delta", "is_rename")
 
     def __init__(self, name: str, ratio: Optional[float] = None,
                  amount: Optional[float] = None,
                  is_new: bool = False, is_exit: bool = False,
-                 delta: Optional[float] = None):
+                 delta: Optional[float] = None,
+                 is_rename: bool = False):
         self.name = name
         self.ratio = ratio          # 比例数值（不带 %）
         self.amount = amount        # 出资额数值（万元）
         self.is_new = is_new
         self.is_exit = is_exit
         self.delta = delta          # （持股±x%）的带符号数值
+        self.is_rename = is_rename  # 【名称变更】标注：该条目是同一主体的新名字
 
     @property
     def has_delta(self) -> bool:
@@ -137,16 +139,17 @@ def _is_junk_name(name: str) -> bool:
     return False
 
 
-def _extract_flags_and_delta(text: str) -> Tuple[bool, bool, Optional[float]]:
-    """从条目文本提取【新进】【退出】和（持股±x%）"""
+def _extract_flags_and_delta(text: str) -> Tuple[bool, bool, bool, Optional[float]]:
+    """从条目文本提取【新进】【退出】【名称变更】和（持股±x%）"""
     is_new = "【新进】" in text
     is_exit = "【退出】" in text
+    is_rename = "【名称变更】" in text
     delta = None
     m = re.search(r'[（(]\s*持股\s*([+-])\s*([\d.]+)\s*%?\s*[）)]', text)
     if m:
         sign = 1.0 if m.group(1) == "+" else -1.0
         delta = sign * float(m.group(2))
-    return is_new, is_exit, delta
+    return is_new, is_exit, is_rename, delta
 
 
 def parse_shareholder_entries(text: str) -> List[Entry]:
@@ -197,7 +200,7 @@ def _parse_entries_format_a(text: str) -> List[Entry]:
         m = re.split(r'【|持股比例|认缴出资额|出资额|国别', part, maxsplit=1)
         raw_name = m[0].strip()
         name = _clean_display_name(raw_name)
-        is_new, is_exit, delta = _extract_flags_and_delta(part)
+        is_new, is_exit, is_rename, delta = _extract_flags_and_delta(part)
 
         ratio = None
         rm = re.search(r'持股比例[:：]\s*([\d.]+)\s*%', part)
@@ -213,12 +216,18 @@ def _parse_entries_format_a(text: str) -> List[Entry]:
                 amount = None
 
         if _is_junk_name(name):
+            # 【名称变更】标注单独成段时（粘在国别后面），归属于前一个条目
+            if (is_rename and ratio is None and amount is None and delta is None
+                    and not is_new and not is_exit):
+                if entries:
+                    entries[-1].is_rename = True
+                continue
             # 无名碎片（跨页断行的后半截）：保留数值/标注，由 _merge_fragments 归并
             if ratio is None and amount is None and delta is None and not is_new and not is_exit:
                 continue
-            entries.append(Entry("", ratio, amount, is_new, is_exit, delta))
+            entries.append(Entry("", ratio, amount, is_new, is_exit, delta, is_rename))
             continue
-        entries.append(Entry(name, ratio, amount, is_new, is_exit, delta))
+        entries.append(Entry(name, ratio, amount, is_new, is_exit, delta, is_rename))
     return entries
 
 
@@ -248,6 +257,7 @@ def _merge_fragments(entries: List[Entry]) -> List[Entry]:
                         cand.delta = e.delta
                     cand.is_new = cand.is_new or e.is_new
                     cand.is_exit = cand.is_exit or e.is_exit
+                    cand.is_rename = cand.is_rename or e.is_rename
                     break
             continue
         if target is None and e.delta is not None and e.ratio is None:
@@ -266,6 +276,7 @@ def _merge_fragments(entries: List[Entry]) -> List[Entry]:
                 target.amount = e.amount
             target.is_new = target.is_new or e.is_new
             target.is_exit = target.is_exit or e.is_exit
+            target.is_rename = target.is_rename or e.is_rename
         else:
             if target.ratio is None:
                 target.ratio = e.ratio
@@ -273,6 +284,7 @@ def _merge_fragments(entries: List[Entry]) -> List[Entry]:
                 target.amount = e.amount
             target.is_new = target.is_new or e.is_new
             target.is_exit = target.is_exit or e.is_exit
+            target.is_rename = target.is_rename or e.is_rename
     return out
 
 
@@ -296,12 +308,12 @@ def _parse_entries_format_b(text: str) -> List[Entry]:
         # 跨页粘合：两个名字之间隔着大段空白（页脚被清洗后残留）
         sub_chunks = re.split(r'\s{2,}', chunk)
         for sub in sub_chunks:
-            is_new, is_exit, delta = _extract_flags_and_delta(sub)
+            is_new, is_exit, is_rename, delta = _extract_flags_and_delta(sub)
             name_part = re.split(r'【|[（(]\s*持股', sub, maxsplit=1)[0]
             name = _clean_display_name(name_part)
             if _is_junk_name(name):
                 continue
-            entries.append(Entry(name, None, None, is_new, is_exit, delta))
+            entries.append(Entry(name, None, None, is_new, is_exit, delta, is_rename))
     return entries
 
 
@@ -579,25 +591,42 @@ def _merge_two(a: Entry, b: Entry) -> Entry:
 
     winner = b if score(b) >= score(a) else a
     loser = a if winner is b else b
-    # 显示名：带 delta 的是变更后（新）名字；否则前缀关系取长者，后缀关系取短者
-    n_w, n_l = _norm_name(winner.name), _norm_name(loser.name)
-    if winner.has_delta and not loser.has_delta:
-        display = winner.name
-    elif n_w.startswith(n_l):
-        display = winner.name
-    elif n_l.startswith(n_w):
-        display = loser.name
-    elif n_w.endswith(n_l):
-        display = loser.name
+    # 【名称变更】标注的条目就是变更后的新名字，显示名与数值以它为准
+    # （跨页交织时变更后列可能物理上出现在变更前列之前，不能靠出现顺序判断）
+    rename_e = None
+    if winner.is_rename and not loser.is_rename:
+        rename_e = winner
+    elif loser.is_rename and not winner.is_rename:
+        rename_e = loser
+    if rename_e is not None:
+        display = rename_e.name
+        ratio = rename_e.ratio if rename_e.ratio is not None else (
+            winner.ratio if winner.ratio is not None else loser.ratio)
+        amount = rename_e.amount if rename_e.amount is not None else (
+            winner.amount if winner.amount is not None else loser.amount)
     else:
-        display = winner.name
+        # 显示名：带 delta 的是变更后（新）名字；否则前缀关系取长者，后缀关系取短者
+        n_w, n_l = _norm_name(winner.name), _norm_name(loser.name)
+        if winner.has_delta and not loser.has_delta:
+            display = winner.name
+        elif n_w.startswith(n_l):
+            display = winner.name
+        elif n_l.startswith(n_w):
+            display = loser.name
+        elif n_w.endswith(n_l):
+            display = loser.name
+        else:
+            display = winner.name
+        ratio = winner.ratio if winner.ratio is not None else loser.ratio
+        amount = winner.amount if winner.amount is not None else loser.amount
     return Entry(
         display,
-        winner.ratio if winner.ratio is not None else loser.ratio,
-        winner.amount if winner.amount is not None else loser.amount,
+        ratio,
+        amount,
         winner.is_new or loser.is_new,
         winner.is_exit or loser.is_exit,
         winner.delta if winner.delta is not None else loser.delta,
+        winner.is_rename or loser.is_rename,
     )
 
 
