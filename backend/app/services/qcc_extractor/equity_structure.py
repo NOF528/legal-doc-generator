@@ -96,12 +96,15 @@ def _norm_name(name: str) -> str:
 
 
 def _clean_display_name(name: str) -> str:
-    """名称展示清洗：去标注、去*、去职务/股东类型后缀、去首尾空白"""
+    """名称展示清洗：去标注、去*、去职务/股东类型后缀、去项目名前缀、去首尾空白"""
     n = re.sub(r'【[^】]*】', '', name)
     n = re.sub(r'[（(]\s*持股[^）)]*[）)]', '', n)
     n = n.replace('*', '').replace('＊', '')
     n = re.sub(r'[（(]?(法定代表人|执行董事|董事|监事|总经理|经理|负责人)[）)]?$', '', n)
-    n = re.sub(r'(自然人股东|内资合伙企业|企业法人|外资企业|机关法人)$', '', n)
+    n = re.sub(r'(自然人股东|内资合伙企业|企业法人|外资企业|机关法人|法人股东)$', '', n)
+    n = re.sub(r'^(其他事项备案|章程备案|投资人变更|股东变更|发起人变更)', '', n)
+    # 中文字符间的空白是 PDF 换行残留，去除（保留英文名内的空格）
+    n = re.sub(r'(?<=[一-龥）)])\s+(?=[一-龥（(])', '', n)
     return n.strip(' ;；:：、，,')
 
 
@@ -124,6 +127,12 @@ def _is_junk_name(name: str) -> bool:
         return True
     # 纯数字/标点
     if not re.search(r'[一-龥A-Za-z]', n):
+        return True
+    # 纯通用词组合（跨页碎片如 "合伙企业（有限合伙）"），不是真实股东名
+    stripped = re.sub(r'[\(（\)）\s]', '', n)
+    for tok in _GENERIC_TOKENS:
+        stripped = stripped.replace(tok, "")
+    if not stripped:
         return True
     return False
 
@@ -441,22 +450,25 @@ def compute_shareholder_timeline(
             elif shareholders and not rec_ratios:
                 shareholders = []
             if not shareholders:
-                shareholders = [
-                    {
-                        "name": state[key]["display"],
-                        "ratio": _fmt(state[key]["ratio"]),
-                        "amount": _fmt(_amount_of(state[key]["ratio"], capital)),
-                    }
-                    for key in state_order if key in state
-                ]
+                shareholders = _state_roster(state, state_order, capital)
             # 比例合计校验：名册明显缺人（跨页截断）时按状态补齐
             ratios = [float(s["ratio"]) for s in shareholders if s["ratio"]]
             if ratios:
                 total = sum(ratios)
                 if total < 98.5:
                     seen = {_norm_name(s["name"]) for s in shareholders}
+                    seen_ratios = [float(s["ratio"]) for s in shareholders if s["ratio"]]
                     for key in state_order:
                         if key in state and _match_key(key, seen) is None:
+                            # 更名股东去重：比例相同且名称有显著共同片段 →
+                            # 与名册中某位是同一主体（改名），跳过
+                            if _is_renamed_duplicate(state[key], shareholders):
+                                continue
+                            # 加入后合计明显超过 100% 的，多半是后期才新进、
+                            # 变更记录缺失导致倒推时未能剔除，跳过
+                            cand_ratio = state[key]["ratio"]
+                            if cand_ratio and total + cand_ratio > 101.5:
+                                continue
                             shareholders.append({
                                 "name": state[key]["display"],
                                 "ratio": _fmt(state[key]["ratio"]),
@@ -469,14 +481,7 @@ def compute_shareholder_timeline(
                                 break
         else:
             # 纯注册资本变更日：股东不变，仅出资额随资本变化
-            shareholders = [
-                {
-                    "name": state[key]["display"],
-                    "ratio": _fmt(state[key]["ratio"]),
-                    "amount": _fmt(_amount_of(state[key]["ratio"], capital)),
-                }
-                for key in state_order if key in state
-            ]
+            shareholders = _state_roster(state, state_order, capital)
 
         result[date] = {"shareholders": shareholders, "capital": capital}
 
@@ -499,15 +504,22 @@ def compute_shareholder_timeline(
                 elif e.is_exit:
                     # 退出方：加回。（持股-x%）的 x 即其变更前比例；无 delta 时取条目前值
                     pre_ratio = abs(e.delta) if e.delta is not None else e.ratio
+                    # 若与状态中现有股东是同一主体（后来的新名字），先移除新名字，
+                    # 避免更名股东新旧两个名字同时出现在更早日期的名册里
+                    for sk in list(state.keys()):
+                        if _is_renamed_pair(e.name, pre_ratio, state[sk]["display"], state[sk]["ratio"]):
+                            state.pop(sk, None)
+                            if sk in state_order:
+                                state_order.remove(sk)
                     state[key] = {"display": e.name, "ratio": pre_ratio}
                     if key not in state_order:
                         state_order.append(key)
-                elif e.delta is not None:
+                elif e.delta is not None and e.ratio is not None:
                     # 在册股东比例变动：pre = post - delta（条目比例为变更后值）
+                    # 注意：仅格式A（条目自带比例）才可靠——格式B（纯名单）的
+                    # （持股±x%）标注可能粘在前一个无关名字上，盲目反向会污染状态
                     mk = _match_key(key, state.keys())
                     base = e.ratio
-                    if base is None and mk is not None:
-                        base = state[mk]["ratio"]
                     if base is not None:
                         store_key = mk if mk is not None else key
                         display = state[store_key]["display"] if store_key in state else e.name
@@ -527,7 +539,7 @@ def compute_shareholder_timeline(
 
 
 def _dedup_entries(entries: List[Entry]) -> List[Entry]:
-    """同日多条记录合并后的二次去重（含前缀名），保留带 delta/比例的条目"""
+    """同名（含前缀/后缀匹配）去重，保留带 delta/比例的条目"""
     best: Dict[str, Entry] = {}
     order: List[str] = []
     for e in entries:
@@ -539,33 +551,82 @@ def _dedup_entries(entries: List[Entry]) -> List[Entry]:
             best[key] = e
             order.append(key)
             continue
-        cur = best[existing]
-
-        def score(x: Entry) -> int:
-            return (2 if x.has_delta else 0) + (1 if x.ratio is not None else 0) + (1 if x.is_new else 0)
-
-        winner = e if score(e) > score(cur) else cur
-        loser = cur if winner is e else e
-        # 显示名选择：前缀关系取更长者（截断补全），后缀关系取更短者（去粘合头）
-        n_w, n_l = _norm_name(winner.name), _norm_name(loser.name)
-        if n_w.startswith(n_l):
-            display = winner.name
-        elif n_l.startswith(n_w):
-            display = loser.name
-        elif n_w.endswith(n_l):
-            display = loser.name
+        best[existing] = _merge_two(best[existing], e)
+    result = [best[k] for k in order]
+    # 更名股东二次去重：记录变更前/后列分别列出新旧名字（无标注），
+    # 名字模糊匹配为同一主体时合并（保留带 delta 者，即变更后值）
+    merged: List[Entry] = []
+    for e in result:
+        dup = None
+        for m in merged:
+            if _is_renamed_pair(m.name, m.ratio, e.name, e.ratio):
+                dup = m
+                break
+        if dup is None:
+            merged.append(e)
         else:
-            display = winner.name
-        merged = Entry(
-            display,
-            winner.ratio if winner.ratio is not None else loser.ratio,
-            winner.amount if winner.amount is not None else loser.amount,
-            winner.is_new or loser.is_new,
-            winner.is_exit or loser.is_exit,
-            winner.delta if winner.delta is not None else loser.delta,
-        )
-        best[existing] = merged
-    return [best[k] for k in order]
+            idx = merged.index(dup)
+            merged[idx] = _merge_two(dup, e)
+    return merged
+
+
+def _merge_two(a: Entry, b: Entry) -> Entry:
+    """合并同一主体的两条记录：delta 优先（变更后值）；
+    分数相同取后出现者——拼接文本中变更后列在变更前列之后，
+    无标注记录里后出现的是变更后数值。显示名取带 delta 的一方。"""
+    def score(x: Entry) -> int:
+        return (2 if x.has_delta else 0) + (1 if x.ratio is not None else 0) + (1 if x.is_new else 0)
+
+    winner = b if score(b) >= score(a) else a
+    loser = a if winner is b else b
+    # 显示名：带 delta 的是变更后（新）名字；否则前缀关系取长者，后缀关系取短者
+    n_w, n_l = _norm_name(winner.name), _norm_name(loser.name)
+    if winner.has_delta and not loser.has_delta:
+        display = winner.name
+    elif n_w.startswith(n_l):
+        display = winner.name
+    elif n_l.startswith(n_w):
+        display = loser.name
+    elif n_w.endswith(n_l):
+        display = loser.name
+    else:
+        display = winner.name
+    return Entry(
+        display,
+        winner.ratio if winner.ratio is not None else loser.ratio,
+        winner.amount if winner.amount is not None else loser.amount,
+        winner.is_new or loser.is_new,
+        winner.is_exit or loser.is_exit,
+        winner.delta if winner.delta is not None else loser.delta,
+    )
+
+
+def _state_roster(state: Dict[str, Dict], state_order: List[str],
+                  capital: Optional[float]) -> List[Dict]:
+    """从当期状态生成名册（含更名股东自去重：同名主体保留后出现者，
+    因为倒推中后加回的是该时点更准确的旧名字）"""
+    roster = [
+        {
+            "name": state[key]["display"],
+            "ratio": _fmt(state[key]["ratio"]),
+            "amount": _fmt(_amount_of(state[key]["ratio"], capital)),
+        }
+        for key in state_order if key in state
+    ]
+    result: List[Dict] = []
+    for sh in roster:
+        dup = None
+        for i, kept in enumerate(result):
+            if _is_renamed_pair(
+                    kept["name"], float(kept["ratio"]) if kept["ratio"] else None,
+                    sh["name"], float(sh["ratio"]) if sh["ratio"] else None):
+                dup = i
+                break
+        if dup is None:
+            result.append(sh)
+        else:
+            result[dup] = sh  # 后出现的（倒推加回的旧名）覆盖
+    return result
 
 
 def _amount_of(ratio: Optional[float], capital: Optional[float]) -> Optional[float]:
@@ -573,6 +634,80 @@ def _amount_of(ratio: Optional[float], capital: Optional[float]) -> Optional[flo
     if ratio is None or capital is None:
         return None
     return round(ratio * capital / 100.0, 4)
+
+
+# 更名股东模糊匹配时剔除的通用词
+_GENERIC_TOKENS = [
+    "有限合伙", "合伙企业", "有限公司", "有限责任", "股份", "企业",
+    "基金", "科技", "创业", "咨询", "中心", "公司", "合伙",
+]
+
+
+def _distinctive(name: str) -> str:
+    """去掉通用词后的显著名称片段"""
+    n = _norm_name(name)
+    for tok in _GENERIC_TOKENS:
+        n = n.replace(tok, "")
+    return n
+
+
+def _common_substring(a: str, b: str) -> Tuple[int, int, int]:
+    """最长公共子串的 (长度, a中起始, b中起始)"""
+    best = (0, 0, 0)
+    if not a or not b:
+        return best
+    for i in range(len(a)):
+        for j in range(i + 1, len(a) + 1):
+            if j - i <= best[0]:
+                continue
+            k = b.find(a[i:j])
+            if k >= 0:
+                best = (j - i, i, k)
+    return best
+
+
+# 公共片段黑名单：仅是这些通用词组合的公共片段不算显著
+_GENERIC_COMMON = re.compile(
+    r'^[\(（\)）]*(股权|投资|投资管理|企业管理|管理|咨询|创业|科技|基金|企业|中心|合伙)+[\(（\)）]*$'
+)
+
+
+def _is_renamed_pair(name_a: str, ratio_a: Optional[float],
+                     name_b: str, ratio_b: Optional[float]) -> bool:
+    """判断两个名字是否同一主体（股东更名）：
+    - 公共片段必须显著（不能只是"股权投资"这类通用词，也不能纯是共同前缀，
+      防止 "佛山市和高数科" vs "佛山市和高智行"、"深圳市怡亚通" vs "深圳市前海怡亚通" 误判）
+    - 弱条件：比例近似（±0.02）且显著公共片段 ≥3 字符
+    - 强条件：显著公共片段 ≥5 字符、同时延伸到两个显著名末尾、覆盖较短名 ≥80%
+    """
+    da, db = _distinctive(name_a), _distinctive(name_b)
+    if len(da) < 3 or len(db) < 3:
+        return False
+    length, start_a, start_b = _common_substring(da, db)
+    common = da[start_a:start_a + length]
+    if length < 3 or _GENERIC_COMMON.match(common):
+        return False
+    # 纯共同前缀（如 "佛山市和高…"）不算显著
+    if start_a == 0 and start_b == 0:
+        return False
+    if (ratio_a is not None and ratio_b is not None
+            and abs(ratio_a - ratio_b) <= 0.02 and length >= 3):
+        return True
+    ends_both = (start_a + length == len(da)) and (start_b + length == len(db))
+    if length >= 5 and ends_both and length >= 0.8 * min(len(da), len(db)):
+        return True
+    return False
+
+
+def _is_renamed_duplicate(state_sh: Dict, shareholders: List[Dict]) -> bool:
+    """判断 state 中的股东是否与名册中某位是同一主体（改名），补齐时跳过"""
+    s_ratio = state_sh.get("ratio")
+    for sh in shareholders:
+        o_ratio = float(sh["ratio"]) if sh.get("ratio") else None
+        if _is_renamed_pair(state_sh.get("display", ""), s_ratio,
+                            sh.get("name", ""), o_ratio):
+            return True
+    return False
 
 
 def _fill_from_state(post: List[Entry], state: Dict[str, Dict],

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Plus,
   ArrowUp,
@@ -151,6 +151,18 @@ export default function HistoryWorkspace() {
     setTimeout(() => setToast(""), 2000);
   };
 
+  /* 拖到卡片外时阻止浏览器默认行为（否则浏览器会直接打开/下载 PDF，
+     用户会误以为“上传没反应”） */
+  useEffect(() => {
+    const prevent = (e: DragEvent) => e.preventDefault();
+    window.addEventListener("dragover", prevent);
+    window.addEventListener("drop", prevent);
+    return () => {
+      window.removeEventListener("dragover", prevent);
+      window.removeEventListener("drop", prevent);
+    };
+  }, []);
+
   /* ---------- 文件选择 ---------- */
 
   const acceptFile = (f: File | undefined | null) => {
@@ -174,7 +186,15 @@ export default function HistoryWorkspace() {
       const fd = new FormData();
       fd.append("file", file);
       const res = await fetch("/api/v1/qcc/history-evolution", { method: "POST", body: fd });
-      const data = await res.json();
+      // 先读文本再尝试解析 JSON：网关/代理可能返回 HTML 错误页，
+      // 直接 res.json() 会抛出难懂的 SyntaxError
+      const text = await res.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(res.ok ? "服务响应异常，请重试" : `服务错误（${res.status}），请稍后重试`);
+      }
       if (!res.ok || !data.success) {
         throw new Error(data?.error?.message || data?.detail || "解析失败，请重试");
       }
@@ -205,8 +225,12 @@ export default function HistoryWorkspace() {
       const a = document.createElement("a");
       a.href = url;
       a.download = `${result?.company_name || "公司"}_历史沿革.docx`;
+      // Firefox 要求 <a> 挂载在 DOM 中才能触发下载；
+      // 延迟 revoke 防止 Safari/大文件场景下下载被取消
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) {
       setError(e instanceof Error ? e.message : "导出失败，请重试");
     } finally {
@@ -281,6 +305,8 @@ export default function HistoryWorkspace() {
                     e.stopPropagation();
                     setFile(null);
                     setResult(null);
+                    // 清空 input 值，确保再次选择同一文件也能触发 onChange
+                    if (fileInputRef.current) fileInputRef.current.value = "";
                   }}
                   aria-label="移除文件"
                 >
@@ -309,9 +335,13 @@ export default function HistoryWorkspace() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf"
+            accept=".pdf,application/pdf"
             hidden
-            onChange={(e) => acceptFile(e.target.files?.[0])}
+            onChange={(e) => {
+              acceptFile(e.target.files?.[0]);
+              // 清空值，确保重复选择同一文件也能触发 onChange
+              e.target.value = "";
+            }}
           />
         </div>
 
