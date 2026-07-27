@@ -1,12 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
-  Plus,
-  ArrowUp,
   Info,
   X,
-  FileText,
   Lightbulb,
   ChevronUp,
   Mail,
@@ -15,6 +12,7 @@ import {
   Download,
   ClipboardList,
 } from "lucide-react";
+import UploadCard from "./UploadCard";
 
 /* ============================================================
    常量
@@ -133,7 +131,6 @@ function QRImage() {
 
 export default function HistoryWorkspace() {
   const [file, setFile] = useState<File | null>(null);
-  const [dragOver, setDragOver] = useState(false);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState("");
@@ -143,7 +140,6 @@ export default function HistoryWorkspace() {
   const [showGuide, setShowGuide] = useState(false);
   const [toast, setToast] = useState("");
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const resultRef = useRef<HTMLDivElement>(null);
 
   const showToast = (msg: string) => {
@@ -151,22 +147,9 @@ export default function HistoryWorkspace() {
     setTimeout(() => setToast(""), 2000);
   };
 
-  /* 拖到卡片外时阻止浏览器默认行为（否则浏览器会直接打开/下载 PDF，
-     用户会误以为“上传没反应”） */
-  useEffect(() => {
-    const prevent = (e: DragEvent) => e.preventDefault();
-    window.addEventListener("dragover", prevent);
-    window.addEventListener("drop", prevent);
-    return () => {
-      window.removeEventListener("dragover", prevent);
-      window.removeEventListener("drop", prevent);
-    };
-  }, []);
-
   /* ---------- 文件选择 ---------- */
 
-  const acceptFile = (f: File | undefined | null) => {
-    if (!f) return;
+  const acceptFile = (f: File) => {
     if (!f.name.toLowerCase().endsWith(".pdf")) {
       setError("请上传企查查 PDF 格式的企业信用报告");
       return;
@@ -281,69 +264,17 @@ export default function HistoryWorkspace() {
         )}
 
         {/* 主输入卡片 */}
-        <div
-          className={`kw-card kw-fade-up ${dragOver ? "kw-dragover" : ""}`}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragOver(true);
+        <UploadCard
+          file={file}
+          loading={loading}
+          placeholder="拖入企查查 PDF 报告，或点击 ＋ 选择文件，我来生成历史沿革…"
+          onFileSelect={acceptFile}
+          onFileRemove={() => {
+            setFile(null);
+            setResult(null);
           }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragOver(false);
-            acceptFile(e.dataTransfer.files?.[0]);
-          }}
-        >
-          <div className="kw-card-body" onClick={() => !file && fileInputRef.current?.click()}>
-            {file ? (
-              <span className="kw-file-chip">
-                <FileText size={16} strokeWidth={1.5} />
-                <span className="kw-file-chip-name">{file.name}</span>
-                <button
-                  className="kw-file-chip-remove"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setFile(null);
-                    setResult(null);
-                    // 清空 input 值，确保再次选择同一文件也能触发 onChange
-                    if (fileInputRef.current) fileInputRef.current.value = "";
-                  }}
-                  aria-label="移除文件"
-                >
-                  <X size={14} strokeWidth={1.5} />
-                </button>
-              </span>
-            ) : (
-              <span className="kw-card-placeholder">
-                拖入企查查 PDF 报告，或点击 ＋ 选择文件，我来生成历史沿革…
-              </span>
-            )}
-          </div>
-          <div className="kw-card-toolbar">
-            <button className="kw-icon-btn" onClick={() => fileInputRef.current?.click()} aria-label="选择文件">
-              <Plus size={20} strokeWidth={1.5} />
-            </button>
-            <button
-              className={`kw-send-btn ${file && !loading ? "kw-active" : ""}`}
-              onClick={generate}
-              disabled={!file || loading}
-              aria-label="开始生成"
-            >
-              <ArrowUp size={18} strokeWidth={2} />
-            </button>
-          </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf,application/pdf"
-            hidden
-            onChange={(e) => {
-              acceptFile(e.target.files?.[0]);
-              // 清空值，确保重复选择同一文件也能触发 onChange
-              e.target.value = "";
-            }}
-          />
-        </div>
+          onGenerate={generate}
+        />
 
         {/* 错误提示 */}
         {error && (

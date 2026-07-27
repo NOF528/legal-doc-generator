@@ -277,6 +277,80 @@ async def generate_history_word(
 
 
 # ================================================================
+# 知识产权抽取（商标 + 专利）
+# ================================================================
+@router.post("/ip-asset")
+async def extract_ip_asset_endpoint(request: Request, file: UploadFile = File(...)):
+    """
+    提取企查查报告的知识产权：
+    - 商标：只保留「已注册」状态（图案仅在 docx 中体现，JSON 预览标注 has_image）
+    - 专利：只保留法律状态为「授权」的，类型归一为 发明/实用新型/外观设计
+    """
+    temp_path = None
+    try:
+        temp_path, _ = await save_upload_temp(file, _client_host(request))
+
+        from app.services.ip_extractor import extract_ip_assets
+        result = extract_ip_assets(temp_path, with_images=True)
+
+        return {
+            "success": True,
+            "company_name": result.company_name,
+            "trademarks": [
+                {**t, "has_image": t["app_no"] in result.trademark_images}
+                for t in result.trademarks
+            ],
+            "patents": result.patents,
+            "summary": result.summary(),
+            "trademark_summary_text": result.trademark_summary_text(),
+            "patent_summary_text": result.patent_summary_text(),
+            "warnings": result.warnings,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=500, detail=f"提取失败: {str(e)}\n{traceback.format_exc()}")
+    finally:
+        cleanup_temp(temp_path)
+
+
+@router.post("/ip-asset/docx")
+async def generate_ip_word(request: Request, file: UploadFile = File(...)):
+    """生成知识产权 Word 文档（汇总段 + 商标表含图案 + 专利表）"""
+    temp_path = None
+    output_path = None
+
+    try:
+        temp_path, _ = await save_upload_temp(file, _client_host(request))
+
+        from app.services.ip_extractor import extract_ip_assets
+        from app.services.ip_extractor.ip_docx_generator import generate_ip_word_document
+        result = extract_ip_assets(temp_path, with_images=True)
+
+        output_fd, output_path = tempfile.mkstemp(suffix='.docx')
+        os.close(output_fd)
+        generate_ip_word_document(result, output_path)
+
+        return FileResponse(
+            output_path,
+            media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            filename=f"{result.company_name}_知识产权.docx"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        if output_path and os.path.exists(output_path):
+            os.unlink(output_path)
+        raise HTTPException(status_code=500, detail=f"生成失败: {str(e)}\n{traceback.format_exc()}")
+    finally:
+        cleanup_temp(temp_path)
+
+
+# ================================================================
 # 模板列表
 # ================================================================
 @router.get("/history-evolution/templates")

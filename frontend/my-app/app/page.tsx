@@ -1,5 +1,5 @@
-import HistoryWorkspace from "./components/HistoryWorkspace";
+import Workspace from "./components/Workspace";
 
 export default function Home() {
-  return <HistoryWorkspace />;
+  return <Workspace />;
 }
