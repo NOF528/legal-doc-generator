@@ -35,6 +35,7 @@ interface Trademark {
 
 interface Patent {
   seq: number;
+  name: string;
   patent_type: string;
   legal_status: string;
   app_no: string;
@@ -252,6 +253,7 @@ export default function IPWorkspace() {
                     <thead>
                       <tr>
                         <th>序号</th>
+                        <th>名称</th>
                         <th>专利类型</th>
                         <th>法律状态</th>
                         <th>申请号</th>
@@ -262,6 +264,7 @@ export default function IPWorkspace() {
                       {result.patents.map((p) => (
                         <tr key={p.seq}>
                           <td>{p.seq}</td>
+                          <td style={{ textAlign: "left" }}>{p.name}</td>
                           <td>{p.patent_type}</td>
                           <td>{p.legal_status}</td>
                           <td>{p.app_no}</td>

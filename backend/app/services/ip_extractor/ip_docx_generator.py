@@ -128,16 +128,20 @@ class IPDocxGenerator(HistoryDocxGenerator):
         doc.add_paragraph()
 
     def _add_patent_table(self, doc: Document, patents: List[Dict]):
-        headers = ["序号", "专利类型", "法律状态", "申请号", "申请日期"]
+        headers = ["序号", "名称", "专利类型", "法律状态", "申请号", "申请日期"]
         table = self._new_table(doc, headers, len(patents))
         for row_idx, p in enumerate(patents):
             cells = table.rows[row_idx + 1].cells
             self._fill_cell(cells[0], str(p["seq"]))
-            self._fill_cell(cells[1], p["patent_type"])
-            self._fill_cell(cells[2], p["legal_status"])
-            self._fill_cell(cells[3], p["app_no"])
-            self._fill_cell(cells[4], p["app_date"])
-        self._set_col_widths(table, [1.4, 2.4, 2.2, 5.4, 3.0])
+            # 名称较长，左对齐
+            self._fill_cell(cells[1], p.get("name", ""))
+            for paragraph in cells[1].paragraphs:
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            self._fill_cell(cells[2], p["patent_type"])
+            self._fill_cell(cells[3], p["legal_status"])
+            self._fill_cell(cells[4], p["app_no"])
+            self._fill_cell(cells[5], p["app_date"])
+        self._set_col_widths(table, [1.0, 4.8, 1.8, 1.8, 3.4, 2.2])
         doc.add_paragraph()
 
 
